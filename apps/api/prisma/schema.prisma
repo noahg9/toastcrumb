@@ -1,0 +1,206 @@
+// Prisma schema for toastcrumb.
+//
+// Per docs/ARCHITECTURE.md: the database stores DYNAMIC user state only.
+// Concepts / lessons / quizzes / graph structure are STATIC content in /content
+// and are intentionally NOT modeled here.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String     @id @default(cuid())
+  // --- Auth fields (Story 7.1). All nullable so existing anonymous users are
+  // unaffected; Postgres allows many NULLs under a @unique constraint. ---
+  email             String?    @unique
+  passwordHash      String?
+  // Added now (unused this story) so Story 7.2 Google OAuth needs no second migration.
+  googleId          String?    @unique
+  name              String?
+  // Authorization role (Story 14.1). Default "user"; the only elevated value
+  // this epic uses is "superadmin". A validated string (see USER_ROLES in
+  // src/auth/roles.ts), NOT a Postgres enum — matches the QuizOutcome.surface
+  // "enum-ish string" convention and avoids an enum-migration dance. This is the
+  // authoritative role source: RolesGuard reads it fresh from the DB per admin
+  // request (never trusts the JWT claim). Set it via `pnpm role:set`.
+  role              String     @default("user")
+  xp                Int        @default(0)
+  level             Int        @default(1)
+  streak            Int        @default(0)
+  // Last day (UTC) a lesson was completed; drives the daily-streak boundary.
+  // Nullable: null = never completed a lesson (first completion starts streak at 1).
+  lastActiveDate    DateTime?
+  // Concept ids the user has finished. Concept definitions live in /content.
+  completedConcepts String[]   @default([])
+  // Current position in the concept graph (a concept id), or null before first lesson.
+  currentNode       String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  progress          Progress[]
+  reviewStates      ReviewState[]
+  quizOutcomes      QuizOutcome[]
+  events            Event[]
+}
+
+model Progress {
+  id           String   @id @default(cuid())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String
+  conceptId    String
+  // 0-100
+  completion   Int      @default(0)
+  lastAccessed DateTime @default(now())
+
+  @@unique([userId, conceptId])
+  @@index([userId])
+}
+
+// Per-user x per-concept spaced-review memory model (Story 9.1, Epic 9 FSRS loop).
+// Stores the FSRS-6 "card" state for one (userId, conceptId) pair so the review
+// scheduler can compute when a learner should next review a concept. Dynamic user
+// state only — concept content lives in /content and is never modeled here; the
+// unit of scheduling is the CONCEPT (the app rotates lesson variants over it).
+// Fields map 1:1 to the ts-fsrs `Card` so persistence is a trivial round-trip
+// (see apps/api/src/reviews/reviews.service.ts toCard/fromCard). Same grain,
+// relation and index pattern as `Progress`.
+model ReviewState {
+  id            String    @id @default(cuid())
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  // Concept id from /content — a plain string, never a foreign key (concepts are
+  // not DB rows). Mirrors Progress.conceptId.
+  conceptId     String
+  // --- FSRS `Card` fields (ts-fsrs). Stored directly for a 1:1 round-trip. ---
+  stability     Float     // memory stability (days); 0 until first graded review
+  difficulty    Float     // 1-10 difficulty; 0 until first graded review
+  due           DateTime  // when this concept is next due for review
+  lastReview    DateTime? // last graded-review instant; null until first grade
+  reps          Int       @default(0) // successful-review counter
+  lapses        Int       @default(0) // times the card lapsed (Review -> Relearning)
+  state         Int       @default(0) // FSRS State enum: 0=New,1=Learning,2=Review,3=Relearning
+  elapsedDays   Int       @default(0) // card.elapsed_days
+  scheduledDays Int       @default(0) // card.scheduled_days
+  // card.learning_steps — current index within the (re)learning-steps schedule.
+  // Persisted for round-trip fidelity: without it a reloaded card never graduates
+  // out of the learning phase (verified — see Story 9.1 dev notes).
+  learningSteps Int       @default(0)
+  // --- Variant-rotation bookkeeping (Story 9.2). NOT an FSRS `Card` field: it is
+  // NOT part of the toCard/fromCard round-trip. The `/content` lesson id (e.g.
+  // "cache-aside-quiz") of the variant most recently SERVED as a review to this
+  // user for this concept; null until the first review is served. FSRS schedules
+  // the concept while the app rotates variants underneath it. Read via the
+  // @@unique key — no separate index needed. ---
+  lastVariantId String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([userId, conceptId])
+  @@index([userId])
+  // Supports listDueForUser's `where: { userId, due: { lte: now } }, orderBy: { due: "asc" }`.
+  @@index([userId, due])
+}
+
+// Per-question difficulty telemetry (Story 10.5, Epic 10). One row per answered
+// quiz question — the app's FIRST per-question signal (User/Progress/ReviewState
+// are all per-concept, and Story 9.5 discards the per-question counts). Pooled
+// across users to measure how hard each individual question is in practice
+// (observed accuracy + response latency); the offline scripts/difficulty-report.ts
+// aggregates these to flag illusion-of-competence and out-of-band items for the
+// editorial gate. Dynamic user state only — a question is identified by
+// `questionId` (a hash of the /content question text — questionId() in
+// @toastcrumb/types), NEVER a foreign key (content is not modeled in the DB).
+//
+// Written fire-and-forget by POST /users/:id/quiz-outcomes; writing a row NEVER
+// mints XP / streak / Progress / an FSRS grade — a narrow single-writer, the
+// telemetry-only sibling to Story 9.5's FSRS-only grading writer.
+//
+// Merge caveat (dev notes): `userId` cascades on delete like Progress/ReviewState,
+// so an anonymous user's outcomes are removed when they sign in (mergeInto deletes
+// the anon row). Accepted for now — merges are rare and telemetry is best-effort;
+// a nullable/no-cascade userId would complicate the relation. Revisit if
+// preserving merged-user telemetry becomes worthwhile.
+model QuizOutcome {
+  id         String   @id @default(cuid())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  // Concept id from /content — a plain string, never a foreign key. Mirrors
+  // Progress.conceptId / ReviewState.conceptId.
+  conceptId  String
+  // /content lesson (variant) id the question was served from.
+  lessonId   String
+  // Stable question identity — a hash of the /content question text. The report
+  // aggregates on this, so it is indexed.
+  questionId String
+  correct    Boolean
+  // Pretest (Story 10.1): recorded for completeness but EXCLUDED from the
+  // difficulty band and the illusion-of-competence flag by the report.
+  isPretest  Boolean  @default(false)
+  // Time from the question being shown to the answer being picked, in ms; null
+  // when timing is unavailable. The "instant answer" signal for the report.
+  latencyMs  Int?
+  // Which surface captured this: "lesson" | "review" | "daily".
+  surface    String
+  createdAt  DateTime @default(now())
+
+  // The report groups by questionId; userId supports cascade cleanup.
+  @@index([questionId])
+  @@index([userId])
+}
+
+// Generic first-party behavioral event stream (Story 14.2, Epic 14). One row per
+// captured behavior — lesson/session starts & abandons, page views, sign-in
+// attempts, daily plays, navigation — the raw material the superadmin console
+// (Story 14.3 metrics / 14.4 dashboards) aggregates. Kept deliberately generic
+// (a `name` + a `props Json?` payload) so a new event type needs only a new
+// `name` string + client call, NEVER a migration — essential for iterating on
+// what to track. This is DYNAMIC user state (a DB row), never content.
+//
+// Written best-effort, fire-and-forget by POST /users/:id/events; writing a row
+// NEVER mints XP / streak / Progress / an FSRS grade and NEVER blocks or alters
+// the learner's scoring or navigation (the Story 10.5 telemetry boundary). It is
+// the behavioral sibling to QuizOutcome — QuizOutcome stays the per-question
+// difficulty writer; Event is behavior only, so the two streams never
+// double-write completions/grades.
+//
+// `props` is PII-free by contract — ids / indices / booleans only, never
+// free-text answers or emails. Indexed on the three axes the 14.3 aggregations
+// group/filter on: `name`, `userId`, `createdAt`.
+//
+// Retention: a generic event table grows unbounded. For a pre-traffic app this
+// is fine; a prune/rollup policy (e.g. drop raw events older than N months once
+// 14.3 aggregates exist, or a daily rollup table) is a FUTURE concern, not built
+// here — named as a conscious deferral (mirrors 10.5's unbounded-findMany posture).
+//
+// Merge caveat (as QuizOutcome): `userId` cascades on delete, so an anonymous
+// user's events are removed when they sign in (mergeInto deletes the anon row).
+// Accepted — merges are rare and telemetry is best-effort.
+model Event {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  // Event name from the EVENT_NAMES catalog (@toastcrumb/types). A validated
+  // string (see EVENT_NAMES), NOT a Postgres enum — matches the QuizOutcome.surface
+  // "enum-ish string" convention and lets new names ship with no enum migration.
+  name      String
+  // Event-specific payload (e.g. { conceptId, cardIndex }). PII-free by contract.
+  // A flexible Json column so new event types need no schema change (Decision 1).
+  props     Json?
+  // Which surface emitted this ("lesson" | "session" | "daily" | "auth" | ...);
+  // optional free-ish string, not enum-constrained (behavioral, not scored).
+  surface   String?
+  // Per-tab page-session id (minted once per page load, stored in sessionStorage)
+  // so 14.3 can compute sessions / session length. Null when unavailable.
+  sessionId String?
+  createdAt DateTime @default(now())
+
+  // The three axes 14.3 aggregations group/filter on; userId also supports cascade cleanup.
+  @@index([name])
+  @@index([userId])
+  @@index([createdAt])
+}

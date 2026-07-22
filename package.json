@@ -1,0 +1,21 @@
+{
+  "name": "toastcrumb",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The open engine behind toastcrumb — a habit-forming micro-learning app for software engineering intuition",
+  "packageManager": "pnpm@11.1.2",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter \"./apps/*\" dev",
+    "dev:web": "pnpm --filter @toastcrumb/web dev",
+    "dev:api": "pnpm --filter @toastcrumb/api dev",
+    "build": "pnpm --recursive build",
+    "lint": "pnpm --recursive lint",
+    "typecheck": "pnpm --recursive typecheck",
+    "db:generate": "pnpm --filter @toastcrumb/api prisma:generate",
+    "db:migrate": "pnpm --filter @toastcrumb/api prisma:migrate",
+    "db:seed": "pnpm --filter @toastcrumb/api prisma:seed"
+  }
+}

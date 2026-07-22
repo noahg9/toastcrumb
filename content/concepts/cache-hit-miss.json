@@ -1,0 +1,173 @@
+{
+  "id": "cache-hit-miss",
+  "title": "Cache Hit and Miss",
+  "description": "A cache hit means the data you need is already stored nearby; a cache miss means it is not, so the system must fetch it from the slower original source.",
+  "difficulty": 1,
+  "domain": "caching",
+  "prerequisites": [
+    "cache"
+  ],
+  "next": [
+    "cache-eviction",
+    "cache-aside"
+  ],
+  "contexts": [
+    "Cloudflare returning a cached BBC article from an edge node instead of hitting the origin server",
+    "Spotify pre-loading your next queued track before you ever press skip",
+    "Amazon showing a product price pulled from Redis instead of querying the orders database",
+    "Google Maps loading a map tile already stored on your device rather than fetching it over the network",
+    "Shopify serving a storefront page from CDN instead of recomputing it on each request",
+    "Stripe returning a cached API key lookup instead of round-tripping to Postgres",
+    "GitHub delivering a repository README that has not changed in days without touching the file system"
+  ],
+  "lessons": [
+    {
+      "id": "cache-hit-miss-scenario",
+      "conceptId": "cache-hit-miss",
+      "type": "scenario",
+      "cards": [
+        {
+          "type": "context",
+          "headline": "7am, and 3 million readers want the same article",
+          "body": "A major UK election result lands at 7am. Within minutes, 3 million readers click the same BBC headline. Cloudflare's [[edge node|a CDN server placed close to users, in cities around the world]] in London already has the article stored, and it serves every copy on its own without a single request reaching BBC's servers."
+        },
+        {
+          "type": "tension",
+          "body": "BBC's [[origin server|the central web server that originally generates and hosts the content]] can handle a finite number of requests per second before it buckles. A breaking-news spike sends millions of requests to the same URL in a matter of minutes. Without something absorbing those requests in front of the origin, the site goes down exactly when it matters most."
+        },
+        {
+          "type": "flow",
+          "headline": "How Cloudflare handles the spike",
+          "steps": [
+            {
+              "label": "Article published",
+              "detail": "BBC's origin sends the page to Cloudflare edge nodes around the world"
+            },
+            {
+              "label": "Reader clicks link",
+              "detail": "Request routes to the nearest Cloudflare edge, not to BBC directly"
+            },
+            {
+              "label": "Edge checks its store",
+              "detail": "Is a fresh copy of this URL already here?"
+            },
+            {
+              "label": "Edge has it: serve instantly",
+              "detail": "Edge returns the stored copy in under 10ms; origin never involved"
+            },
+            {
+              "label": "Edge lacks it: forward request",
+              "detail": "Edge asks BBC's origin and waits for a response (100 to 300ms)"
+            },
+            {
+              "label": "Store and serve",
+              "detail": "Edge saves the fresh copy; the next reader gets step 4 instead of step 5"
+            }
+          ]
+        },
+        {
+          "type": "insight",
+          "headline": "Hit or miss",
+          "body": "Step 4 in that flow is a [[cache hit|the requested data is already in the cache and is returned immediately, without contacting the original source]]: the edge has it, the origin never knows. Step 5 is a [[cache miss|the requested data is not in the cache, so the system fetches it from the slower original source]]: the edge had to go get it. The difference in response time is roughly 10 milliseconds versus several hundred."
+        },
+        {
+          "type": "diagram",
+          "variant": "architecture",
+          "headline": "Two paths through the edge",
+          "body": "Every request hits the edge first. What happens next depends on whether the edge already has a copy.",
+          "nodes": [
+            {
+              "id": "browser",
+              "label": "Browser"
+            },
+            {
+              "id": "edge",
+              "label": "Edge Node"
+            },
+            {
+              "id": "origin",
+              "label": "BBC Origin"
+            }
+          ],
+          "edges": [
+            {
+              "from": "browser",
+              "to": "edge",
+              "label": "all requests"
+            },
+            {
+              "from": "edge",
+              "to": "browser",
+              "label": "hit: ~10ms"
+            },
+            {
+              "from": "edge",
+              "to": "origin",
+              "label": "miss only"
+            },
+            {
+              "from": "origin",
+              "to": "edge",
+              "label": "response"
+            }
+          ]
+        },
+        {
+          "type": "quiz",
+          "body": "",
+          "question": "When a reader clicks a BBC article that Cloudflare's edge node already has stored, what happens to BBC's origin server?",
+          "options": [
+            "The origin server receives no request at all; the edge serves the stored copy directly",
+            "The origin server gets the request but responds instantly from its own local copy",
+            "The origin server receives the request and sends a signal confirming the stored copy is still valid"
+          ],
+          "correctIndex": 0,
+          "explanation": "A cache hit cuts the origin completely out of the loop. The edge has everything it needs and sends it straight back to the reader. This is why a modest origin can appear to handle millions of concurrent readers: most of them never actually reach it.",
+          "optionExplanations": [
+            "",
+            "The origin is not involved in a cache hit at all. The edge, not the origin, is what holds and serves the stored copy.",
+            "Checking with the origin on every hit would put the origin back in the path for every request, which is exactly what caching is designed to prevent."
+          ]
+        },
+        {
+          "type": "stat",
+          "headline": "The scale of a CDN cache",
+          "value": "46M",
+          "unit": "HTTP requests per second handled by Cloudflare",
+          "context": "A [[CDN|content delivery network: a global system of edge servers that caches content close to users]] like Cloudflare processes around 46 million HTTP requests every second. The vast majority are served from edge cache, never reaching the origin servers behind them."
+        },
+        {
+          "type": "misconception",
+          "body": "A cache miss means something is broken. If the edge does not have the data, the cache has failed or is misconfigured."
+        },
+        {
+          "type": "insight",
+          "headline": "Misses are how the cache fills up",
+          "body": "The first time anyone requests a fresh BBC article, every edge node in the world misses, fetches from the origin, and stores a copy with a [[TTL|time-to-live: how long the edge keeps that copy before discarding it and fetching a fresh one]]. From that point on, readers hit until the TTL expires. Misses are not errors; they are the cold start that builds the cache."
+        },
+        {
+          "type": "quiz",
+          "contrast": true,
+          "body": "",
+          "question": "Cloudflare caches a BBC article with a 60-second TTL (the edge keeps its copy for 60 seconds, then re-fetches). A regional news site uses a CDN with a 12-hour TTL on its articles. Both publishers push a correction to a live article. Which readers see the wrong text for longer, and why?",
+          "options": [
+            "The regional site's readers, because a 12-hour TTL means the edge holds the wrong copy for up to 12 hours before fetching the correction",
+            "BBC's readers, because Cloudflare's global scale means far more people read the stale copy before the 60 seconds expire"
+          ],
+          "correctIndex": 0,
+          "explanation": "TTL sets the ceiling on how long a stale copy can linger. A 60-second TTL corrects within a minute; a 12-hour TTL leaves every reader on the wrong version for up to half a day. Higher traffic does not change when the edge re-fetches.",
+          "optionExplanations": [
+            "",
+            "Scale affects how many people read the stale copy, not how long it persists. TTL alone controls when the edge re-fetches. A busy site with a short TTL corrects far faster than a quiet one with a long TTL."
+          ]
+        },
+        {
+          "type": "reward",
+          "body": "Every BBC article that loads in a flash during a breaking-news spike, every news page that stays up when millions of readers arrive at once, is surviving because an edge node already had the answer. Cloudflare alone handles tens of millions of cached responses every second, keeping origins calm behind the scenes. Now when a page snaps open faster than you expected, you know exactly what did the work."
+        }
+      ],
+      "xpReward": 10,
+      "orderIndex": 0
+    }
+  ]
+}

@@ -1,0 +1,388 @@
+{
+  "id": "cache-aside",
+  "title": "Cache-Aside Pattern",
+  "description": "The application checks the cache first, and on a miss it fetches from the database and writes the result back into the cache itself before returning it.",
+  "difficulty": 2,
+  "domain": "caching",
+  "prerequisites": [
+    "cache-hit-miss"
+  ],
+  "next": [],
+  "contexts": [
+    "GitHub serving a repository's star count on every page view after the first visitor triggers a DB fetch",
+    "Airbnb loading a listing's nightly price and availability the first time a searcher opens that property",
+    "Shopify rendering a storefront's product catalog on the first request during a flash sale, then caching it for the surge",
+    "Slack fetching a workspace's full member list the first time someone opens the People directory",
+    "DoorDash pulling a restaurant's menu from the database on the first order-session and storing it for the lunch rush",
+    "Spotify resolving an artist's top tracks when the first listener opens their profile after a new release drops",
+    "Reddit hydrating a subreddit's sidebar stats the first time a post goes viral and traffic spikes"
+  ],
+  "lessons": [
+    {
+      "id": "cache-aside-quiz",
+      "conceptId": "cache-aside",
+      "type": "quiz",
+      "cards": [
+        {
+          "type": "context",
+          "headline": "Which path does the data take?",
+          "body": "A searcher just opened an Airbnb listing for a cabin in Vermont, and the page needs the nightly price and availability calendar in under 200 milliseconds. Two engineering teams are debating how to serve that data: one would query the database on every single page load; the other says there is a smarter path."
+        },
+        {
+          "type": "compare",
+          "headline": "Two ways to serve a listing price",
+          "left": {
+            "label": "Always-DB",
+            "points": [
+              "Query the database on every request",
+              "Always returns the latest price",
+              "50-200ms database round-trip each time",
+              "Database cost grows with traffic"
+            ]
+          },
+          "right": {
+            "label": "Cache-Aside",
+            "points": [
+              "Check a fast store before the database",
+              "Fill the store on first miss, serve from it after",
+              "Under 1ms for warm, repeat requests",
+              "Database cost stays flat as traffic grows"
+            ]
+          }
+        },
+        {
+          "type": "insight",
+          "headline": "Your app does the caching work itself",
+          "body": "The [[cache-aside pattern|strategy where the app checks a fast store before querying the database, and writes the result back to the store on a miss]] puts the app fully in charge. Check the [[cache|fast in-memory store that sits in front of the database and returns data in under a millisecond]] first; if the data is not there, fetch it from the database and store it before responding. Airbnb's listing page pays the full database cost exactly once per listing; every request after that reads from the cache."
+        },
+        {
+          "type": "flow",
+          "headline": "Cache-aside: every request, in order",
+          "body": "Every request follows this path, starting from a cold [[cache miss|lookup that finds no entry for the requested key, forcing a database fetch]] and eventually settling into a [[cache hit|lookup that finds the entry in the cache and returns it immediately, skipping the database]].",
+          "steps": [
+            {
+              "label": "Request arrives",
+              "detail": "GET /listings/vt-cabin-123/price"
+            },
+            {
+              "label": "Check cache",
+              "detail": "Lookup by listing ID in [[Redis|open-source in-memory data store, one of the most common cache backends]], takes about 0.1ms"
+            },
+            {
+              "label": "Cache hit",
+              "detail": "Return the stored price immediately; done in under 1ms"
+            },
+            {
+              "label": "Cache miss: query DB",
+              "detail": "Round-trip to [[Postgres|open-source relational database, full name PostgreSQL]], typically 50-200ms"
+            },
+            {
+              "label": "Write to cache",
+              "detail": "Store the result with a 30-second expiry before responding"
+            },
+            {
+              "label": "Respond",
+              "detail": "Client gets the price; the next request for this listing hits the cache"
+            }
+          ]
+        },
+        {
+          "type": "quiz",
+          "body": "",
+          "question": "A searcher is the first person to open an Airbnb listing today and the cache has no entry for it. What does the cache-aside pattern do next?",
+          "options": [
+            "Fetch the price from the database, store it in the cache, then respond",
+            "Return an error and ask the client to retry once the cache is warmed up",
+            "Fetch from the database and schedule a background job to fill the cache later"
+          ],
+          "correctIndex": 0,
+          "explanation": "On a cache miss, cache-aside fetches the real value from the database and writes it to the cache in the same request, before returning the response. The first searcher pays the database cost; every searcher after them gets the cached price in under a millisecond.",
+          "optionExplanations": [
+            "",
+            "Cache-aside never rejects a request on a miss. It falls through to the database, gets the answer, fills the cache, and returns the result in one pass.",
+            "Delaying the cache write to a background job is a real technique, but it is not cache-aside. Cache-aside writes to the cache synchronously in the same request flow, before responding to the client."
+          ]
+        },
+        {
+          "type": "diagram",
+          "variant": "sequence",
+          "headline": "First request: the miss path that fills the cache",
+          "nodes": [
+            {
+              "id": "browser",
+              "label": "Browser"
+            },
+            {
+              "id": "app",
+              "label": "App"
+            },
+            {
+              "id": "cache",
+              "label": "Cache"
+            },
+            {
+              "id": "db",
+              "label": "Database"
+            }
+          ],
+          "edges": [
+            {
+              "from": "browser",
+              "to": "app",
+              "label": "1. GET price"
+            },
+            {
+              "from": "app",
+              "to": "cache",
+              "label": "2. check"
+            },
+            {
+              "from": "cache",
+              "to": "app",
+              "label": "3. miss"
+            },
+            {
+              "from": "app",
+              "to": "db",
+              "label": "4. query"
+            },
+            {
+              "from": "db",
+              "to": "app",
+              "label": "5. row"
+            },
+            {
+              "from": "app",
+              "to": "cache",
+              "label": "6. store"
+            },
+            {
+              "from": "app",
+              "to": "browser",
+              "label": "7. respond"
+            }
+          ]
+        },
+        {
+          "type": "misconception",
+          "body": "The cache stays in sync with the database automatically, so when a host updates their Airbnb nightly rate, every cached copy of that price refreshes within seconds."
+        },
+        {
+          "type": "insight",
+          "headline": "The cache has no idea what the database just did",
+          "body": "In cache-aside, the cache is passive and only learns new data when the app writes to it after a miss. The old price becomes [[stale|a cached value that no longer matches the latest version in the database]] the moment the host updates it, but it stays in the cache until the [[TTL|Time To Live: the number of seconds a cache entry stays valid before it is automatically deleted]] expires and the next request fetches a fresh copy. Your app is the only bridge between the database and the cache; the cache never reaches out on its own."
+        },
+        {
+          "type": "quiz",
+          "contrast": true,
+          "body": "",
+          "question": "Service A uses cache-aside with a 10-minute TTL to serve Airbnb listing prices. Service B skips the cache entirely and queries the database on every request. A host updates their nightly rate in the database. Which service shows searchers the outdated price, and why?",
+          "options": [
+            "Service A, because the old price sits in its cache for up to 10 minutes before the TTL forces a fresh fetch",
+            "Service B, because a database write takes time to propagate before the next read sees the updated value"
+          ],
+          "correctIndex": 0,
+          "explanation": "Cache-aside writes to the cache on a miss, not on every database update. Service B reads the database on every request and sees the new price the moment the host saves it. Service A holds a stale copy until its 10-minute TTL window closes, which is the cost of the speed gain.",
+          "optionExplanations": [
+            "",
+            "A committed write in the same database is immediately visible to the next read. Service B queries the database on every request, so it always sees the latest price. Staleness is a cache problem, not a database problem."
+          ]
+        },
+        {
+          "type": "reward",
+          "body": "Every listing price, product page, and map tile you load online is probably served by some version of this same pattern, often with several cache layers stacked between you and the original database. The core insight is simple: most reads ask for the same data someone else already fetched, so go to the database once and hand back a copy to everyone after. Airbnb's Vermont cabin price is just the clearest single example of the trick that makes the whole fast web possible."
+        }
+      ],
+      "xpReward": 10,
+      "orderIndex": 0
+    },
+    {
+      "id": "cache-aside-scenario",
+      "conceptId": "cache-aside",
+      "type": "scenario",
+      "cards": [
+        {
+          "type": "context",
+          "headline": "50,000 eyes on one number",
+          "body": "A GitHub repository just went viral on Hacker News and page views jumped from a few hundred to tens of thousands per hour in minutes. Every one of those pages shows the repo's star count, a number stored in a PostgreSQL database that takes around 50 milliseconds to fetch. Without a [[cache|temporary store that keeps a copy of data so future requests can skip the original source]], that database is about to absorb tens of thousands of identical queries."
+        },
+        {
+          "type": "tension",
+          "headline": "One database, infinite requests",
+          "body": "The naive fix is to query the database on every page load. A single PostgreSQL instance handling production traffic can sustain a few thousand queries per second before latency climbs and connections start queuing. Add more app servers to handle the surge and all you have done is aim more parallel queries at the same bottleneck."
+        },
+        {
+          "type": "flow",
+          "headline": "How Cache-Aside resolves it, step by step",
+          "body": "GitHub's app servers handle the star count like this on the very first request after a cold start.",
+          "steps": [
+            {
+              "label": "Request arrives",
+              "detail": "Visitor loads a repo page; app needs the current star count"
+            },
+            {
+              "label": "Check the cache",
+              "detail": "App looks up a key in [[Redis|fast in-memory data store widely used as a cache layer]]"
+            },
+            {
+              "label": "Cache miss",
+              "detail": "[[Cache miss|a lookup that finds no stored value: the cache has nothing for this key yet]]"
+            },
+            {
+              "label": "Query the database",
+              "detail": "App sends a SQL query to PostgreSQL, roughly 50ms round trip"
+            },
+            {
+              "label": "Write to cache",
+              "detail": "App stores the count in Redis with a [[TTL|time-to-live: how long a cached value is kept before it expires]]"
+            },
+            {
+              "label": "Return the response",
+              "detail": "First visitor gets their answer; roughly 50ms total"
+            },
+            {
+              "label": "All subsequent requests",
+              "detail": "[[Cache hit|a lookup that finds a stored value]] in Redis returns the count in under 1ms, skipping the database entirely"
+            }
+          ]
+        },
+        {
+          "type": "insight",
+          "headline": "The app owns the caching logic",
+          "body": "This is the [[Cache-Aside pattern|a caching strategy where the app checks the cache, fetches from the database on a miss, and writes the result back into the cache itself]]. The database and the cache never communicate directly; only the application bridges them. The cache is populated lazily: only data that actually gets requested ever lands in it."
+        },
+        {
+          "type": "diagram",
+          "variant": "sequence",
+          "headline": "A star count request: the first visitor triggers the fetch",
+          "nodes": [
+            {
+              "id": "browser",
+              "label": "Browser"
+            },
+            {
+              "id": "app",
+              "label": "App Server"
+            },
+            {
+              "id": "redis",
+              "label": "Redis"
+            },
+            {
+              "id": "db",
+              "label": "PostgreSQL"
+            }
+          ],
+          "edges": [
+            {
+              "from": "browser",
+              "to": "app",
+              "label": "1. GET /repo"
+            },
+            {
+              "from": "app",
+              "to": "redis",
+              "label": "2. check key"
+            },
+            {
+              "from": "redis",
+              "to": "app",
+              "label": "3. miss (nil)"
+            },
+            {
+              "from": "app",
+              "to": "db",
+              "label": "4. query stars"
+            },
+            {
+              "from": "db",
+              "to": "app",
+              "label": "5. 42,847"
+            },
+            {
+              "from": "app",
+              "to": "redis",
+              "label": "6. SET key, TTL 60s"
+            },
+            {
+              "from": "app",
+              "to": "browser",
+              "label": "7. respond"
+            }
+          ]
+        },
+        {
+          "type": "quiz",
+          "body": "",
+          "question": "In the Cache-Aside pattern, after the app fetches a star count from the database, what does it do before returning the response?",
+          "options": [
+            "It stores the result in the cache with a TTL",
+            "It returns the result and lets the cache layer warm itself up asynchronously",
+            "It notifies the database to push future updates into the cache"
+          ],
+          "correctIndex": 0,
+          "explanation": "Storing the value in the cache is the defining step of Cache-Aside. Without that write, the next request would also be a miss and the database would absorb every request. The app writes to the cache so every visitor after the first gets a near-instant response.",
+          "optionExplanations": [
+            "",
+            "In Cache-Aside the cache never warms itself; the app is responsible for every write to it. There is no asynchronous warm-up happening behind the scenes.",
+            "The database has no knowledge of the cache in Cache-Aside. Nothing in the database layer ever writes to Redis; that is entirely the application's job."
+          ]
+        },
+        {
+          "type": "misconception",
+          "body": "When the star count changes in the database, the cached value automatically refreshes to match."
+        },
+        {
+          "type": "insight",
+          "headline": "The cache holds whatever the app put there",
+          "body": "In Cache-Aside, the cache has no connection to the database and does not watch for changes. It holds the value the app stored, and it keeps holding it until the TTL expires or the app explicitly deletes that key. If the star count climbs from 40,000 to 41,000 while the cached entry is still live, every visitor sees the old number, and that is a deliberate trade-off: slightly stale data in exchange for a database that stays fast under load."
+        },
+        {
+          "type": "compare",
+          "headline": "Who does the fetching on a cache miss?",
+          "body": "Cache-Aside puts the app in charge of every cache operation. A [[Read-Through cache|a cache that automatically fetches missing data from the database itself, hiding that logic from the application]] moves that responsibility into the cache layer.",
+          "left": {
+            "label": "Cache-Aside",
+            "points": [
+              "App checks the cache on every read",
+              "App fetches from the DB on a miss",
+              "App writes the result to the cache",
+              "Cache never contacts the database"
+            ]
+          },
+          "right": {
+            "label": "Read-Through Cache",
+            "points": [
+              "App reads from the cache only",
+              "Cache fetches from the DB on a miss",
+              "Cache writes and returns the result",
+              "App code carries less caching logic"
+            ]
+          }
+        },
+        {
+          "type": "quiz",
+          "contrast": true,
+          "body": "",
+          "question": "A Cache-Aside service loses its Redis instance. A Read-Through cache service also loses its cache. Both services still have their databases running. Which one keeps serving requests correctly, and why?",
+          "options": [
+            "The Cache-Aside service, because its app already has code to query the database when the cache misses",
+            "The Read-Through cache service, because the cache layer sits between the app and the database"
+          ],
+          "correctIndex": 0,
+          "explanation": "Cache-Aside is resilient by design: the application always carries its own fallback path to the database. When the cache disappears, the app just misses on every request and hits the database directly. Read-Through buries the DB-fetch logic inside the cache layer, so if that layer goes away, the app has no path to data and requests fail.",
+          "optionExplanations": [
+            "",
+            "In a Read-Through setup the app has no code to reach the database on its own; it only knows how to read from the cache. If the cache instance disappears, the app loses its only path to data and requests fail."
+          ]
+        },
+        {
+          "type": "reward",
+          "body": "Every star count, trending chart, and contributor badge you see on GitHub loads in under a millisecond because of exactly this pattern. GitHub has been one of the most prominent public users of Redis since the early 2010s, relying on it to absorb traffic surges whenever a repository goes viral. The small piece of code that checks the cache, misses, queries PostgreSQL, and writes the result back is one of the most load-bearing patterns in all of backend engineering."
+        }
+      ],
+      "xpReward": 10,
+      "orderIndex": 1
+    }
+  ]
+}

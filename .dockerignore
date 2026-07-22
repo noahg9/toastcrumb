@@ -1,0 +1,11 @@
+# Keep host-only artifacts out of the Docker build context. The image installs
+# its own dependencies and builds from source, so host node_modules (pnpm
+# symlinks valid only on the host) and build output must never be copied in.
+**/node_modules
+**/dist
+**/.next
+**/*.tsbuildinfo
+.git
+.env
+**/.env
+**/.env.local

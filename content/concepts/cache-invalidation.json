@@ -1,0 +1,210 @@
+{
+  "id": "cache-invalidation",
+  "title": "Cache Invalidation",
+  "description": "Removing or updating stale entries in a cache so callers never read outdated data after the underlying source changes.",
+  "difficulty": 2,
+  "domain": "caching",
+  "prerequisites": [
+    "cache"
+  ],
+  "next": [],
+  "contexts": [
+    "Amazon showing a $29.99 price seconds after a seller drops it to $24.99",
+    "Cloudflare edge nodes still serving an old homepage after a marketing team deploys a site update",
+    "Shopify displaying items as in-stock after warehouse inventory hits zero",
+    "GitHub serving a stale README to visitors after a developer pushes new documentation",
+    "Slack showing a deactivated user as a valid recipient after an admin removes their account",
+    "YouTube caching a video thumbnail that the creator already replaced with a new one",
+    "Stripe dashboard listing a charge as pending after it has already been refunded"
+  ],
+  "lessons": [
+    {
+      "id": "cache-invalidation-quiz",
+      "conceptId": "cache-invalidation",
+      "type": "quiz",
+      "cards": [
+        {
+          "type": "context",
+          "headline": "The update went live. Nobody can see it.",
+          "body": "The marketing team just pushed a new homepage, but users in Tokyo, Frankfurt, and Dallas are still seeing the old one. A [[CDN|network of servers that caches content near users]] like Cloudflare has hundreds of [[edge nodes|CDN servers placed close to users, around the globe]] holding [[stale|outdated cached entries that no longer match the current source]] copies of the old page. There are exactly two ways to fix this: wait for those copies to expire on their own, or reach in and delete them right now."
+        },
+        {
+          "type": "compare",
+          "headline": "Two ways to fix a stale cache",
+          "left": {
+            "label": "TTL Expiry",
+            "points": [
+              "Cached copy auto-expires after a set time",
+              "No extra wiring needed",
+              "Stale window lasts up to the full TTL after a change",
+              "Marketing waits an hour to see their update"
+            ]
+          },
+          "right": {
+            "label": "Purge on Deploy",
+            "points": [
+              "Deploy pipeline calls the CDN purge API",
+              "Edge copies deleted the moment you push",
+              "Requires wiring in the deploy pipeline",
+              "Marketing sees the update go live in seconds"
+            ]
+          }
+        },
+        {
+          "type": "tension",
+          "headline": "Pick a number and live with it",
+          "body": "With a [[TTL|how long a cached copy stays valid before it expires automatically]], you make one upfront bet. Set it to one hour and a broken layout or outdated headline can sit in cache for 60 minutes after you push a fix. Set it to 5 seconds and the CDN barely helps, because most requests hit the [[origin server|the main server holding the current, live version of content]] directly instead of the cached copy."
+        },
+        {
+          "type": "insight",
+          "headline": "Purging skips the countdown",
+          "body": "When the deploy pipeline finishes, it calls Cloudflare's API to [[purge|explicitly delete one or more cached entries from the CDN right now]] the old homepage across every edge node. Every copy is marked invalid within seconds, and the next visitor triggers a fresh fetch from the origin. No TTL countdown required."
+        },
+        {
+          "type": "flow",
+          "headline": "Purge on deploy, step by step",
+          "steps": [
+            {
+              "label": "Developer pushes to main",
+              "detail": "New homepage code lands in version control"
+            },
+            {
+              "label": "CI/CD pipeline runs",
+              "detail": "[[CI/CD pipeline|automated system that builds and deploys code on each push]] puts new files on the origin server"
+            },
+            {
+              "label": "Pipeline calls the CDN purge API",
+              "detail": "Sends the homepage URL as the target to invalidate"
+            },
+            {
+              "label": "CDN marks all edge copies invalid",
+              "detail": "Propagates across 300+ locations in seconds"
+            },
+            {
+              "label": "Next visitor hits an edge node",
+              "detail": "Edge node has no valid cached copy: cache miss"
+            },
+            {
+              "label": "Edge node fetches from origin",
+              "detail": "New homepage stored in cache and returned to visitor"
+            }
+          ]
+        },
+        {
+          "type": "quiz",
+          "body": "",
+          "question": "The marketing team deployed a homepage update at noon. The CDN has a 1-hour TTL and no purge call was made. What are visitors seeing at 12:45 PM?",
+          "options": [
+            "The old homepage, because the TTL has not expired yet",
+            "The new homepage, because CDNs detect file changes automatically",
+            "A mix of old and new, because edge nodes update at different rates"
+          ],
+          "correctIndex": 0,
+          "explanation": "A TTL is a simple countdown timer. It has no awareness that the origin changed. Until that hour ticks to zero, every edge node serves the cached copy it has, and visitors get the old page.",
+          "optionExplanations": [
+            "",
+            "CDNs do not poll the origin for changes. They serve a cached copy until its TTL expires or a purge call arrives. Automatic change detection would require constant polling and would defeat the purpose of caching.",
+            "Without a purge signal, there is no propagation event to create a mix. All edge nodes hold the same stale copy and expire at the same wall-clock time, so the transition to fresh content happens uniformly when the TTL runs out."
+          ]
+        },
+        {
+          "type": "diagram",
+          "variant": "sequence",
+          "headline": "A cache purge on the wire",
+          "nodes": [
+            {
+              "id": "pipeline",
+              "label": "Deploy Pipeline"
+            },
+            {
+              "id": "cdnapi",
+              "label": "CDN API"
+            },
+            {
+              "id": "edge",
+              "label": "Edge Node"
+            },
+            {
+              "id": "browser",
+              "label": "Browser"
+            },
+            {
+              "id": "origin",
+              "label": "Origin Server"
+            }
+          ],
+          "edges": [
+            {
+              "from": "pipeline",
+              "to": "cdnapi",
+              "label": "1. purge /homepage"
+            },
+            {
+              "from": "cdnapi",
+              "to": "edge",
+              "label": "2. invalidate copy"
+            },
+            {
+              "from": "browser",
+              "to": "edge",
+              "label": "3. GET /homepage"
+            },
+            {
+              "from": "edge",
+              "to": "origin",
+              "label": "4. cache miss, fetch"
+            },
+            {
+              "from": "origin",
+              "to": "edge",
+              "label": "5. fresh page"
+            },
+            {
+              "from": "edge",
+              "to": "browser",
+              "label": "6. serve new copy"
+            }
+          ]
+        },
+        {
+          "type": "misconception",
+          "body": "Keeping a cache fresh is just a TTL tuning problem. Set a short enough TTL and your cache never serves stale data."
+        },
+        {
+          "type": "insight",
+          "headline": "TTL is a fallback, not a solution",
+          "body": "A TTL gives staleness a hard deadline, but it does nothing the moment the source changes. Between a deploy at noon and a TTL expiry at 1 PM, every edge node worldwide faithfully serves yesterday's page. [[Cache invalidation|removing or updating stale cached entries so every caller gets current data]] means acting at the moment of change, not waiting out a countdown."
+        },
+        {
+          "type": "stat",
+          "headline": "The scale of the problem",
+          "value": "300+",
+          "unit": "Cloudflare edge locations worldwide",
+          "context": "A targeted cache purge propagates to all of them in a few seconds. Relying on TTL expiry alone for the same result could mean waiting an hour or more, depending on what you set."
+        },
+        {
+          "type": "quiz",
+          "contrast": true,
+          "body": "",
+          "question": "Site A caches its homepage with a 1-hour TTL and no purge wiring. Site B fires a CDN purge call at the end of every deploy. Both deploy a new homepage at noon. Which site is still showing the old homepage to visitors at 12:55 PM, and why?",
+          "options": [
+            "Site A, because its cached copies stay marked valid until the TTL ticks to zero at 1 PM",
+            "Site B, because propagating a purge to hundreds of edge nodes takes several minutes"
+          ],
+          "correctIndex": 0,
+          "explanation": "Site A's edge nodes hold a copy they believe is valid until 1 PM. They have no signal that anything changed at the origin, so visitors for the next 65 minutes get the old page. Site B's purge completed in seconds, so its visitors saw the new page almost immediately after the deploy.",
+          "optionExplanations": [
+            "",
+            "Purge propagation across a large CDN completes in a few seconds, not minutes. CDNs are specifically built to distribute invalidation signals fast. The misconception is that scale slows purge down to something comparable to TTL expiry, but those two timescales are not even close."
+          ]
+        },
+        {
+          "type": "reward",
+          "body": "Cache invalidation is one of the two problems Phil Karlton famously called the hardest in computer science. Every time a site redesign goes live and looks right everywhere within seconds, a purge call ran behind the scenes. The TTL countdown that was supposed to handle it would still have 55 minutes left."
+        }
+      ],
+      "xpReward": 10,
+      "orderIndex": 0
+    }
+  ]
+}

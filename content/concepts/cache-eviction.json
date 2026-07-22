@@ -1,0 +1,534 @@
+{
+  "id": "cache-eviction",
+  "title": "Cache Eviction Policies",
+  "description": "When a cache is full, a policy such as Least Recently Used or Least Frequently Used decides which existing entries to drop to make room for new ones.",
+  "difficulty": 2,
+  "domain": "caching",
+  "prerequisites": [
+    "cache-hit-miss"
+  ],
+  "next": [],
+  "contexts": [
+    "Redis dropping Shopify session tokens for idle carts to make room for active checkout sessions",
+    "Chrome evicting cached images from background tabs when you have 40 tabs open",
+    "Cloudflare purging cached assets for low-traffic pages to serve a suddenly viral article",
+    "Spotify clearing cached album art for artists you stopped listening to months ago",
+    "YouTube replacing cached thumbnails for old uploads to serve a surge of new video previews",
+    "iOS Safari evicting cached page data for sites you visited once to free space for your banking app",
+    "Amazon CloudFront removing product images for discontinued SKUs to cache new Prime Day listings"
+  ],
+  "lessons": [
+    {
+      "id": "cache-eviction-mixed",
+      "conceptId": "cache-eviction",
+      "type": "mixed",
+      "cards": [
+        {
+          "type": "context",
+          "headline": "One article, zero free space",
+          "body": "One article goes viral. Cloudflare's [[CDN|network of servers that caches content close to users, avoiding trips to the origin]] edge servers are already packed with assets for thousands of low-traffic sites, all sharing a fixed memory budget. The viral article needs space right now, and something already in the cache has to go."
+        },
+        {
+          "type": "quiz",
+          "pretest": true,
+          "body": "",
+          "question": "Cloudflare's cache is full and a viral article needs space. What do you think determines which existing entry gets dropped?",
+          "options": [
+            "A policy that scores each entry on access patterns and removes the lowest scorer",
+            "The largest entry gets removed first to free the most space quickly",
+            "Entries are removed in the order they were added, oldest first"
+          ],
+          "correctIndex": 0,
+          "explanation": "Caches use eviction policies to rank entries by how valuable they still are and drop the lowest-ranked one. The policy defines what 'valuable' means: was it accessed recently, or accessed often?",
+          "optionExplanations": [
+            "",
+            "Size-based eviction exists in some niche systems, but most caches rank by access pattern rather than bytes. A tiny but critical entry would be wrongly sacrificed under a size-first rule.",
+            "Age-first removal ignores whether an entry is popular, so the cache can evict a heavily-requested page simply because it was stored a long time ago. That specific policy is called FIFO, and it is rarely the best choice."
+          ]
+        },
+        {
+          "type": "insight",
+          "headline": "The cache follows a policy, not luck",
+          "body": "A [[cache eviction policy|rule that ranks all cached entries and removes the lowest-ranked one when the cache is full]] decides who survives. The most common is [[LRU|Least Recently Used: removes the entry that was accessed least recently]]. LRU keeps whatever was touched recently and drops whatever has been sitting idle, so Cloudflare can evict quiet pages in milliseconds and immediately cache the viral article."
+        },
+        {
+          "type": "flow",
+          "headline": "How LRU makes room for the viral article",
+          "steps": [
+            {
+              "label": "Request arrives",
+              "detail": "The viral article gets a million hits per hour; cache is at 100% capacity"
+            },
+            {
+              "label": "Cache miss",
+              "detail": "A [[cache miss|request the cache cannot answer because the entry is not stored]] — LRU must free space before it can cache the article"
+            },
+            {
+              "label": "LRU ranks every entry",
+              "detail": "Sorts by last-access time; the entry touched longest ago loses"
+            },
+            {
+              "label": "Evict the lowest-ranked entry",
+              "detail": "A low-traffic page nobody touched in hours is permanently removed"
+            },
+            {
+              "label": "Fetch from origin",
+              "detail": "One round-trip to the [[origin server|server that generates the real response, sitting behind the cache layer]]"
+            },
+            {
+              "label": "Store and serve",
+              "detail": "The article fills the freed slot; every request after this is a [[cache hit|request answered instantly from the cache without touching the origin]]"
+            }
+          ]
+        },
+        {
+          "type": "quiz",
+          "body": "",
+          "question": "The low-traffic page Cloudflare just evicted gets a request an hour later. What happens?",
+          "options": [
+            "It misses the cache and is fetched fresh from the origin server",
+            "LRU kept a backup copy before evicting, so it still returns quickly",
+            "It returns an error because the cached version no longer exists"
+          ],
+          "correctIndex": 0,
+          "explanation": "Eviction is a hard delete: the entry is gone and the memory is freed. The next request for that page is a plain cache miss that goes all the way to the origin server, exactly like the very first request ever made for that page.",
+          "optionExplanations": [
+            "",
+            "LRU does not keep a shadow copy before evicting. Keeping a backup would defeat the purpose of freeing the memory, so eviction is permanent unless the entry is re-fetched and re-stored.",
+            "A cache miss returns a live response from the origin server, not an error. The cache is transparent to the client; they just wait slightly longer for that one request."
+          ]
+        },
+        {
+          "type": "compare",
+          "headline": "LRU vs LFU: two different bets on what 'valuable' means",
+          "body": "[[LFU|Least Frequently Used: removes the entry with the fewest total accesses across its lifetime]] asks a different question than LRU. Instead of 'when was this last touched?', it asks 'how many times has this ever been touched?'",
+          "left": {
+            "label": "LRU (Least Recently Used)",
+            "points": [
+              "Evicts the entry idle the longest",
+              "Great for viral or burst traffic",
+              "Can drop a popular but currently quiet entry",
+              "Fast to implement, widely used in production"
+            ]
+          },
+          "right": {
+            "label": "LFU (Least Frequently Used)",
+            "points": [
+              "Evicts the entry with the fewest total hits",
+              "Protects steady, frequently-accessed content",
+              "Can keep a once-viral entry that went totally quiet",
+              "Needs a frequency counter per entry"
+            ]
+          }
+        },
+        {
+          "type": "quiz",
+          "contrast": true,
+          "body": "",
+          "question": "Two CDN edge servers cache the same tutorial page. Server A uses LRU, which evicts the least recently accessed entry. Server B uses LFU, which evicts the entry with the fewest total accesses. The tutorial accumulated 80,000 hits over six months, then went quiet for 5 hours while viral content filled the cache. Which server evicts the tutorial first, and why?",
+          "options": [
+            "Server A (LRU), because 5 hours of silence makes it the least recently accessed entry, regardless of its 80,000 lifetime hits",
+            "Server B (LFU), because 6 months is long enough for the frequency score to fall below that of newer entries"
+          ],
+          "correctIndex": 0,
+          "explanation": "LRU only cares about recency: 5 quiet hours push the tutorial to the bottom of the recency list, so LRU evicts it no matter how popular it once was. LFU cares about total count: 80,000 hits give the tutorial a high frequency score that shields it even during the quiet period.",
+          "optionExplanations": [
+            "",
+            "LFU counts total accesses and never automatically decays that count. The tutorial's 80,000 hits give it a high score that protects it; LFU would evict a newer entry with far fewer total hits instead."
+          ]
+        },
+        {
+          "type": "diagram",
+          "variant": "state",
+          "headline": "Every cache entry lives this cycle",
+          "body": "A cache entry is never permanent. It lives until an eviction policy scores it the lowest.",
+          "nodes": [
+            {
+              "id": "missing",
+              "label": "No Entry"
+            },
+            {
+              "id": "cached",
+              "label": "In Cache"
+            }
+          ],
+          "edges": [
+            {
+              "from": "missing",
+              "to": "cached",
+              "label": "miss: fetch and store"
+            },
+            {
+              "from": "cached",
+              "to": "cached",
+              "label": "hit: update score"
+            },
+            {
+              "from": "cached",
+              "to": "missing",
+              "label": "evicted: lowest score"
+            }
+          ]
+        },
+        {
+          "type": "reward",
+          "body": "Every fast site you visit during a breaking news cycle is proof that an eviction policy made a real-time bet about what to keep. Cloudflare's network handles tens of millions of requests per second, and policies like LRU are quietly reshuffling those caches so the page you are about to click is already there waiting."
+        }
+      ],
+      "xpReward": 10,
+      "orderIndex": 0
+    },
+    {
+      "id": "cache-eviction-scenario",
+      "conceptId": "cache-eviction",
+      "type": "scenario",
+      "cards": [
+        {
+          "type": "context",
+          "body": "Every Black Friday, Shopify's [[Redis|fast in-memory key-value store used as a cache]] cluster fills up. Millions of shoppers load their carts and walk away, leaving session tokens sitting in memory. By the time the checkout rush peaks, Redis is full, and new writes for users actively trying to pay start failing."
+        },
+        {
+          "type": "tension",
+          "body": "Redis has a hard [[maxmemory|the RAM ceiling an operator sets; Redis will not allocate beyond it]] cap, and once it is hit, new writes fail by default. The engineering team cannot add RAM mid-peak, so they need Redis to intelligently drop stale cart sessions to make room. But which sessions do you drop, and how do you decide?"
+        },
+        {
+          "type": "flow",
+          "headline": "How Redis made room",
+          "steps": [
+            {
+              "label": "Redis hits maxmemory",
+              "detail": "The cluster reaches its RAM ceiling during the checkout rush"
+            },
+            {
+              "label": "New checkout write arrives",
+              "detail": "An active user's session token needs to be stored"
+            },
+            {
+              "label": "Eviction policy activates",
+              "detail": "Redis scores all eligible keys by time of last access"
+            },
+            {
+              "label": "Idle cart session scores worst",
+              "detail": "Last accessed four hours ago, it ranks dead last on recency"
+            },
+            {
+              "label": "Redis evicts it",
+              "detail": "That key is deleted, freeing the memory slot instantly"
+            },
+            {
+              "label": "Checkout session is written",
+              "detail": "The active user's token takes the freed space"
+            },
+            {
+              "label": "User reaches payment",
+              "detail": "Confirmation page loads; the abandoned cart is quietly gone"
+            }
+          ]
+        },
+        {
+          "type": "insight",
+          "headline": "The eviction decision",
+          "body": "A [[cache eviction policy|rule that picks which cached item to delete when the cache is full]] turns a full cache from a blocked system into a self-managing one. The two most common are [[LRU|Least Recently Used: removes the item that was not accessed for the longest time]] and [[LFU|Least Frequently Used: removes the item accessed the fewest times overall]]. Shopify's Redis used LRU: idle cart sessions, untouched for hours, were the obvious losers."
+        },
+        {
+          "type": "diagram",
+          "variant": "state",
+          "headline": "A session token's life in Redis",
+          "nodes": [
+            {
+              "id": "written",
+              "label": "Written"
+            },
+            {
+              "id": "active",
+              "label": "Active"
+            },
+            {
+              "id": "idle",
+              "label": "Idle"
+            },
+            {
+              "id": "evicted",
+              "label": "Evicted"
+            }
+          ],
+          "edges": [
+            {
+              "from": "written",
+              "to": "active",
+              "label": "first access"
+            },
+            {
+              "from": "active",
+              "to": "idle",
+              "label": "no access"
+            },
+            {
+              "from": "idle",
+              "to": "active",
+              "label": "user returns"
+            },
+            {
+              "from": "idle",
+              "to": "evicted",
+              "label": "LRU triggers"
+            },
+            {
+              "from": "evicted",
+              "to": "written",
+              "label": "re-cached on next request"
+            }
+          ]
+        },
+        {
+          "type": "quiz",
+          "body": "",
+          "question": "Shopify's Redis is full. A new checkout session needs to be written. Under LRU eviction, which existing session gets removed?",
+          "options": [
+            "The session for a cart last touched four hours ago",
+            "The session that was written into Redis most recently",
+            "The session with the largest number of items in the cart"
+          ],
+          "correctIndex": 0,
+          "explanation": "LRU targets the item that went the longest without being accessed. A cart abandoned four hours ago hasn't been touched since, so it loses: it is the least recently used entry in the cache.",
+          "optionExplanations": [
+            "",
+            "LRU doesn't care when an entry was written, only when it was last accessed. A recently written session that keeps getting touched is protected, not targeted.",
+            "LRU tracks only the timestamp of the last access, not the contents of the cached value. Cart size has no influence on the eviction decision."
+          ]
+        },
+        {
+          "type": "misconception",
+          "body": "LRU removes the entry that has been in the cache the longest, meaning the one that was written earliest."
+        },
+        {
+          "type": "insight",
+          "headline": "Age of write vs. recency of use",
+          "body": "LRU tracks when an entry was last accessed, not when it was first written. A session token written three days ago but pinged a second ago is safe; a token written one hour ago and never touched since is gone. The policy rewards use, not youth."
+        },
+        {
+          "type": "compare",
+          "headline": "LRU vs. LFU",
+          "left": {
+            "label": "LRU (Least Recently Used)",
+            "points": [
+              "Removes the item idle the longest",
+              "A single recent access protects an entry",
+              "Great for active vs. abandoned traffic patterns",
+              "Can protect rarely-used data after one burst"
+            ]
+          },
+          "right": {
+            "label": "LFU (Least Frequently Used)",
+            "points": [
+              "Removes the item accessed fewest times total",
+              "Requires accumulated history to be safe",
+              "Better for stable, popular content hit repeatedly",
+              "Brand-new items start at zero and are vulnerable"
+            ]
+          }
+        },
+        {
+          "type": "quiz",
+          "contrast": true,
+          "body": "",
+          "question": "Service A caches product data using LRU (Least Recently Used) eviction; Service B caches the same data using LFU (Least Frequently Used) eviction. A new product launches and receives its first burst of thousands of requests. Which service is more likely to keep evicting that product's cached data during the initial burst, and why?",
+          "options": [
+            "Service B, using LFU, because the new product has almost no access history and LFU ranks eviction candidates by total access count",
+            "Service A, using LRU, because the new product was just added to the cache and LRU removes the most recently cached items first"
+          ],
+          "correctIndex": 0,
+          "explanation": "LFU protects items with a long history of hits. A brand-new product hasn't built that history yet, so it ranks poorly against established items and can be evicted even as requests flood in. LRU protects it because every incoming request counts as a recent access.",
+          "optionExplanations": [
+            "",
+            "LRU removes the item that went the longest without being touched. A product under active request is being accessed constantly, which is exactly what protects it under LRU. LRU targets idle entries, not recently cached ones."
+          ]
+        },
+        {
+          "type": "reward",
+          "body": "Every production Redis deployment is running one of these policies right now, and allkeys-lru is the most common choice at scale. The next time your shopping cart vanishes mid-session, your token probably just lost a memory slot to someone one step closer to payment, a quiet decision made in under a millisecond."
+        }
+      ],
+      "xpReward": 10,
+      "orderIndex": 1
+    },
+    {
+      "id": "cache-eviction-quiz",
+      "conceptId": "cache-eviction",
+      "type": "quiz",
+      "cards": [
+        {
+          "type": "context",
+          "headline": "40 tabs open, and Chrome is already choosing",
+          "body": "You have 40 Chrome tabs open, and Chrome is quietly discarding cached images in your background tabs right now. Flip back to one and the images reload from scratch. Chrome hit a memory limit and ran a [[cache eviction policy|rule that decides which stored item to drop when the cache is full]] to make that call, and the two most common versions of this rule make completely different choices about what gets thrown out."
+        },
+        {
+          "type": "compare",
+          "headline": "Two ways to pick what to drop",
+          "body": "The two most common policies are [[LRU|evicts the item not accessed for the longest time]] and [[LFU|evicts the item accessed the fewest times overall]], and they use completely different signals to decide.",
+          "left": {
+            "label": "LRU (by recency)",
+            "points": [
+              "Tracks when each item was last accessed",
+              "Evicts the item idle the longest",
+              "Best when recent access predicts future access",
+              "Used in browsers and OS page caches"
+            ]
+          },
+          "right": {
+            "label": "LFU (by frequency)",
+            "points": [
+              "Counts total accesses per item",
+              "Evicts the item touched the fewest times",
+              "Best when popular items stay popular over time",
+              "Used in some CDN and media caches"
+            ]
+          }
+        },
+        {
+          "type": "insight",
+          "headline": "Recency as a crystal ball",
+          "body": "Chrome relies on LRU. Every time you click a tab, Chrome moves that tab's cached resources to the back of the eviction line. The tab you haven't touched in hours sits at the front, next to be dropped first."
+        },
+        {
+          "type": "flow",
+          "headline": "How LRU picks what to evict",
+          "steps": [
+            {
+              "label": "New resource arrives",
+              "detail": "Chrome needs to cache an image from a tab you just opened"
+            },
+            {
+              "label": "Cache is full",
+              "detail": "No free slots left in memory"
+            },
+            {
+              "label": "Find the LRU item",
+              "detail": "Locate the resource not accessed for the longest time"
+            },
+            {
+              "label": "Evict it",
+              "detail": "Drop that image, freeing the slot"
+            },
+            {
+              "label": "Store the new image",
+              "detail": "Write the incoming resource into the freed slot"
+            },
+            {
+              "label": "Reset the clock",
+              "detail": "Mark the new item as accessed just now"
+            }
+          ]
+        },
+        {
+          "type": "quiz",
+          "body": "",
+          "question": "You left a Chrome tab open for three hours without switching back to it, while actively clicking through 39 other tabs. Under LRU eviction, what happens to that idle tab's cached images when Chrome needs more memory?",
+          "options": [
+            "They get evicted because three hours of inactivity makes them the longest-idle items in the cache",
+            "They stay safe because Chrome protects tabs in the order they were originally opened",
+            "They stay safe because three hours is still under Chrome's default cache expiration window"
+          ],
+          "correctIndex": 0,
+          "explanation": "LRU evicts the item that has sat untouched the longest. Three hours of inactivity while 39 other tabs were actively used puts those images at the front of the eviction line. Chrome enforces this at the memory-pressure level, not on a fixed timer, so a busier session accelerates eviction.",
+          "optionExplanations": [
+            "",
+            "LRU ranks by last-access time, not by when a tab was opened. A tab opened first but revisited often stays fresh; one opened more recently but left idle for hours becomes the eviction candidate.",
+            "LRU is a relative ranking, not a fixed timer. The item idle longer than everything else in the cache gets evicted regardless of any absolute time window."
+          ]
+        },
+        {
+          "type": "insight",
+          "headline": "Frequency as a crystal ball",
+          "body": "LFU bets that popular items stay popular. A music app caching album art for your top 10 most-played artists would not want to drop that art just because you browsed something new three minutes ago. Frequency, not recency, drives the eviction choice."
+        },
+        {
+          "type": "diagram",
+          "variant": "state",
+          "headline": "A cached image's life under LRU",
+          "nodes": [
+            {
+              "id": "empty",
+              "label": "Not Cached"
+            },
+            {
+              "id": "fresh",
+              "label": "Cached"
+            },
+            {
+              "id": "stale",
+              "label": "Idle in Cache"
+            },
+            {
+              "id": "evicted",
+              "label": "Evicted"
+            }
+          ],
+          "edges": [
+            {
+              "from": "empty",
+              "to": "fresh",
+              "label": "first load"
+            },
+            {
+              "from": "fresh",
+              "to": "fresh",
+              "label": "tab visited"
+            },
+            {
+              "from": "fresh",
+              "to": "stale",
+              "label": "time passes"
+            },
+            {
+              "from": "stale",
+              "to": "fresh",
+              "label": "tab revisited"
+            },
+            {
+              "from": "stale",
+              "to": "evicted",
+              "label": "LRU picks it"
+            },
+            {
+              "from": "evicted",
+              "to": "fresh",
+              "label": "re-fetch on visit"
+            }
+          ]
+        },
+        {
+          "type": "misconception",
+          "body": "LRU and LFU are just two names for the same idea; they both end up evicting items you have not been using much."
+        },
+        {
+          "type": "insight",
+          "headline": "Same cache, opposite evictions",
+          "body": "A page you visited 200 times last year but haven't touched today looks worthless to LRU and valuable to LFU. LRU evicts it; LFU keeps it. The two policies can make completely opposite decisions about the same item sitting in the same cache."
+        },
+        {
+          "type": "quiz",
+          "contrast": true,
+          "body": "",
+          "question": "Cache A uses [[LRU|evicts the item not accessed for the longest time]] eviction; Cache B uses [[LFU|evicts the item accessed the fewest times overall]] eviction. Both are full and need to drop one item. Each holds a homepage you have visited 200 times over the past year but not opened today, and a product page you opened for the first time one minute ago. Which cache evicts the homepage to free space, and why?",
+          "options": [
+            "Cache A (LRU), because the homepage has been idle longer than the product page, which was just opened",
+            "Cache B (LFU), because LFU removes the most-accessed item to make room for newer content"
+          ],
+          "correctIndex": 0,
+          "explanation": "LRU evicts the item with the oldest last-access timestamp. The homepage was not opened today; the product page was opened one minute ago. LRU drops the homepage. LFU counts total accesses and evicts the product page at 1 visit, keeping the 200-visit homepage. Same items in two caches, opposite outcomes.",
+          "optionExplanations": [
+            "",
+            "LFU evicts the item with the fewest total accesses, not the most. The product page has 1 visit and the homepage has 200, so LFU drops the product page and protects the frequently-visited homepage."
+          ]
+        },
+        {
+          "type": "reward",
+          "body": "Chrome, the Linux kernel's page cache, and PostgreSQL's buffer pool all default to something close to LRU, meaning the same recency logic deciding which browser tab images to drop is also deciding which database rows stay in memory. The next time a tab reloads on you, you know exactly which item lost the recency race."
+        }
+      ],
+      "xpReward": 10,
+      "orderIndex": 2
+    }
+  ]
+}

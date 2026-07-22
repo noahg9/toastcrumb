@@ -1,0 +1,292 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ── shadcn Tailwind v4 theme ──────────────────────────────────────────────── */
+@theme inline {
+  --color-background:         var(--background);
+  --color-foreground:         var(--foreground);
+  --color-card:               var(--card);
+  --color-card-foreground:    var(--card-foreground);
+  --color-popover:            var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary:            var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary:          var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted:              var(--muted);
+  --color-muted-foreground:   var(--muted-foreground);
+  --color-accent:             var(--accent);
+  --color-accent-foreground:  var(--accent-foreground);
+  --color-destructive:        var(--destructive);
+  --color-border:             var(--border);
+  --color-input:              var(--input);
+  --color-ring:               var(--ring);
+  --radius-sm:   calc(var(--radius) - 4px);
+  --radius-md:   calc(var(--radius) - 2px);
+  --radius-lg:   var(--radius);
+  --radius-xl:   calc(var(--radius) + 4px);
+}
+
+/* ── Design tokens ─────────────────────────────────────────────────────────────
+   --color-brand-* / --color-fg-muted-* are the app's named tokens.
+   --background / --foreground / etc. are shadcn semantic aliases.
+──────────────────────────────────────────────────────────────────────────────── */
+:root {
+  /* app tokens */
+  --color-bg:           #f4f6f9;
+  --color-surface:      #ffffff;
+  --color-surface-2:    #edf1f5;
+  --color-ink:          #0e1520;
+  --color-fg-muted:     #6a7d8e;
+  --color-fg-muted-2:   #a8b8c4;
+  --color-brand:        #ffb454;
+  --color-brand-text:   #b86a00;
+  --color-brand-bg:     rgba(255,180,84,0.08);
+  --color-brand-ring:   rgba(184,106,0,0.22);
+  --color-brand-tint:   rgba(255,180,84,0.14);
+  --color-brand-tint-border: rgba(255,180,84,0.55);
+  --color-brand-half:   rgba(255,180,84,0.55);
+  --color-border:       rgba(14,21,32,0.09);
+  --color-success:      #1a7a40;
+  --color-success-bg:   rgba(26,122,64,0.08);
+  --color-success-ring: rgba(26,122,64,0.28);
+  --color-wrong-bg:     rgba(200,60,60,0.07);
+  --color-wrong-ring:   rgba(200,60,60,0.25);
+
+  /* shadcn semantic aliases */
+  --radius:               0.625rem;
+  --background:           var(--color-bg);
+  --foreground:           var(--color-ink);
+  --card:                 var(--color-surface);
+  --card-foreground:      var(--color-ink);
+  --popover:              var(--color-surface);
+  --popover-foreground:   var(--color-ink);
+  --primary:              var(--color-brand);
+  --primary-foreground:   #3d2200;
+  --secondary:            var(--color-surface-2);
+  --secondary-foreground: var(--color-ink);
+  --muted:                var(--color-surface-2);
+  --muted-foreground:     var(--color-fg-muted);
+  --accent:               var(--color-surface-2);
+  --accent-foreground:    var(--color-ink);
+  --destructive:          #c83c3c;
+  --border:               var(--color-border);
+  --input:                var(--color-border);
+  --ring:                 var(--color-brand);
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Display serif for map titles, region cartouches, headings. */
+.font-display {
+  font-family: var(--font-display), ui-serif, Georgia, "Times New Roman", serif;
+}
+
+/* ── Toast scrollbar ─────────────────────────────────────────────────────────
+   A rounded, floating crust-brown thumb on a transparent track — the 3px
+   transparent border + padding-box clip make it read as a slim inset pill.
+   Scoped to toast (.tc-map) pages so the rest of the app keeps native (incl.
+   auto-hiding overlay) scrollbars: `html:has(.tc-map)` styles the document
+   scrollbar on toast routes; `.tc-map` covers inner scroll areas.
+──────────────────────────────────────────────────────────────────────────── */
+html:has(.tc-map),
+.tc-map {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 74, 26, 0.45) transparent;
+}
+html:has(.tc-map)::-webkit-scrollbar,
+.tc-map ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+html:has(.tc-map)::-webkit-scrollbar-track,
+.tc-map ::-webkit-scrollbar-track {
+  background: transparent;
+}
+html:has(.tc-map)::-webkit-scrollbar-thumb,
+.tc-map ::-webkit-scrollbar-thumb {
+  background-color: rgba(120, 74, 26, 0.45);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+html:has(.tc-map)::-webkit-scrollbar-thumb:hover,
+.tc-map ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(120, 74, 26, 0.65);
+}
+html:has(.tc-map)::-webkit-scrollbar-corner,
+.tc-map ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ── Topographic map (learn page) ────────────────────────────────────────────
+   The skill tree is drawn as a trail map: a parchment sheet with faint contour
+   lines, a breadcrumb trail between waypoints, and mist over regions you haven't
+   reached. Tokens are scoped here so the rest of the (cooler) app is untouched.
+──────────────────────────────────────────────────────────────────────────── */
+.tc-map {
+  /* Toast palette — golden toasted-bread ground, soft crumb surfaces, crust ink. */
+  --tc-paper-1: #faf1de;   /* fresh toast, top (lightened) */
+  --tc-paper-2: #f3e6c9;   /* toasted */
+  --tc-paper-edge: #ecdab4; /* crust edge */
+  --tc-contour: rgba(120, 74, 26, 0.08);
+  --tc-trail: #bd7419;      /* toasted-crust amber */
+  --tc-trail-dim: rgba(120, 74, 26, 0.34);
+  --tc-crumb: rgba(120, 74, 26, 0.5); /* speckle */
+  --tc-mist-rgb: 250, 241, 222;
+  background:
+    radial-gradient(120% 90% at 15% 0%, var(--tc-paper-1) 0%, var(--tc-paper-2) 70%, var(--tc-paper-edge) 100%);
+
+  /* Warm the shared surface tokens so cards read as aged paper resting on the
+     map, not stark cold white. Everything under a .tc-map ancestor — lesson
+     cards, the completion panel, the landing preview, sidebar cards, badges —
+     inherits these without per-component edits. */
+  --color-surface: #fbf3dd;   /* soft crumb (cards sit lighter on the toast) */
+  --color-surface-2: #f0e2c0;
+  --color-border: rgba(120, 74, 26, 0.2);
+  --card: #fbf3dd;
+  --secondary: #f0e2c0;
+  --muted: #f0e2c0;
+  --border: rgba(120, 74, 26, 0.2);
+  --input: rgba(120, 74, 26, 0.2);
+  /* Remaining shadcn surface tokens — keep every surface warm, never cold white. */
+  --background: #fbf3dd;
+  --popover: #fbf3dd;
+  --accent: #f0e2c0;
+
+  /* "Ink" ramp = toasted-crust browns for text on the golden ground. */
+  --tc-ink: rgba(46, 27, 8, 0.95);
+  --tc-ink-soft: rgba(94, 62, 24, 0.86);
+  --tc-ink-mute: rgba(122, 88, 40, 0.72);
+}
+
+/* Soft inner "aged edge" vignette on the sheet. */
+.tc-map-vignette {
+  box-shadow: inset 0 0 120px rgba(120, 92, 52, 0.14);
+}
+
+/* Mist rolling in over unexplored regions — a soft veil that silhouettes the
+   fogged waypoints rather than hiding them. Feathered top/bottom so it reads as
+   drifting fog, not a box, and drifts slowly (motion-safe). */
+.tc-mist {
+  /* Ramp up over a fixed distance, then HOLD full density all the way to the
+     (off-screen) right edge — so the mist never visibly stops, it just keeps
+     going into the unexplored. */
+  background: linear-gradient(
+    90deg,
+    rgba(var(--tc-mist-rgb), 0) 0,
+    rgba(var(--tc-mist-rgb), 0.24) 130px,
+    rgba(var(--tc-mist-rgb), 0.4) 340px,
+    rgba(var(--tc-mist-rgb), 0.5) 520px,
+    rgba(var(--tc-mist-rgb), 0.5) 100%
+  );
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 22%, #000 78%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 22%, #000 78%, transparent 100%);
+  backdrop-filter: blur(2.5px);
+}
+
+/* Waypoints rise into place on load (staggered via inline animation-delay). Uses
+   fill-mode `both` so the final state is always the visible one — if the anim is
+   skipped or blocked, the marker still shows, never a stranded opacity:0. */
+@keyframes tc-rise {
+  from {
+    opacity: 0;
+    transform: translateY(7px) scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.tc-rise {
+  animation: tc-rise 0.45s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tc-rise {
+    animation: none;
+  }
+}
+@keyframes tc-mist-drift {
+  0%,
+  100% {
+    transform: translateX(0);
+    opacity: 0.92;
+  }
+  50% {
+    transform: translateX(10px);
+    opacity: 1;
+  }
+}
+.tc-mist-anim {
+  animation: tc-mist-drift 14s ease-in-out infinite;
+}
+
+/* Active trail crumbs march gently forward, so the path reads as "alive". */
+@keyframes tc-trail-march {
+  to {
+    stroke-dashoffset: -22;
+  }
+}
+.tc-trail-live {
+  animation: tc-trail-march 2.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tc-mist-anim,
+  .tc-trail-live {
+    animation: none;
+  }
+}
+
+/* ── Domain marquee ─────────────────────────────────────────────────────────
+   Two identical copies of the track sit side by side; translating by -50%
+   lands copy 2 exactly where copy 1 began, so the loop is seamless.
+──────────────────────────────────────────────────────────────────────────── */
+@keyframes tc-marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+.tc-marquee-track {
+  animation: tc-marquee 45s linear infinite;
+  will-change: transform;
+}
+.tc-marquee:hover .tc-marquee-track {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tc-marquee-track {
+    animation: none;
+  }
+}
+
+/* ── Skill-tree beacon ───────────────────────────────────────────────────────
+   A soft pulsing ring on the recommended node — a light in the fog that points
+   to your next step. The keyframe drives box-shadow, so it layers over the
+   node's own border without needing an extra element.
+──────────────────────────────────────────────────────────────────────────── */
+@keyframes tc-beacon {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 180, 84, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 9px rgba(255, 180, 84, 0);
+  }
+}
+.tc-beacon {
+  animation: tc-beacon 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tc-beacon {
+    animation: none;
+  }
+}

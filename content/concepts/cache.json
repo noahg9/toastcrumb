@@ -1,0 +1,545 @@
+{
+  "id": "cache",
+  "title": "Cache",
+  "description": "Keep a copy of frequently accessed data somewhere fast so you avoid repeating expensive fetches or computations.",
+  "difficulty": 1,
+  "domain": "caching",
+  "prerequisites": [],
+  "next": [
+    "cache-hit-miss",
+    "cache-invalidation"
+  ],
+  "contexts": [
+    "Google Search returning autocomplete suggestions before you finish typing",
+    "Cloudflare storing a viral news article's HTML at 300 edge nodes so the origin server never gets hit",
+    "Spotify preloading the next track's audio bytes while the current song is still playing",
+    "GitHub Actions reusing a saved node_modules tarball instead of running npm install from scratch every build",
+    "Amazon showing product prices and ratings without querying the warehouse database on every page load",
+    "Redis holding Twitter's home timeline for active users so the feed assembles in milliseconds",
+    "Stripe returning a cached customer object on repeated API calls instead of re-querying Postgres each time",
+    "YouTube serving the same viral video thumbnail from a CDN rather than fetching it from the origin storage bucket"
+  ],
+  "lessons": [
+    {
+      "id": "cache-scenario",
+      "conceptId": "cache",
+      "type": "scenario",
+      "cards": [
+        {
+          "type": "context",
+          "headline": "Before you finish typing",
+          "body": "You start typing 'why is' into Google Search and suggestions appear by the time you hit the third character. Google fields roughly 99,000 search queries every second, so ranking the most popular continuations of your partial phrase in real time sounds impossible. Yet the suggestions arrive in under 100 milliseconds, every single time."
+        },
+        {
+          "type": "quiz",
+          "pretest": true,
+          "body": "",
+          "question": "What do you think Google is doing to return autocomplete suggestions in under 100 milliseconds for every keystroke?",
+          "options": [
+            "Pre-computing suggestion lists and reading from a fast stored copy when your keystroke arrives",
+            "Running a real-time scan of all ongoing searches to rank the most common continuations",
+            "Sending your partial query to multiple data centers and returning whichever responds first"
+          ],
+          "correctIndex": 0,
+          "explanation": "Google pre-computes suggestion lists for common partial queries and stores them in a fast-access store. When your keystroke arrives, the server reads that stored copy in under a millisecond, not from a live scan of billions of searches.",
+          "optionExplanations": [
+            "",
+            "Scanning and ranking billions of live searches per keystroke would take hundreds of milliseconds at minimum. There is no way to do this in real time at Google's scale.",
+            "Racing multiple data centers still requires each one to compute the answer from scratch. The speed comes from skipping the computation entirely, not from running it in parallel."
+          ]
+        },
+        {
+          "type": "insight",
+          "headline": "One copy, countless keystrokes",
+          "body": "Google pre-builds suggestion lists for millions of common partial queries and stores them in a [[cache|a copy of data kept somewhere fast so the original expensive computation does not have to repeat]]. When your keystroke hits their servers, the server looks up the stored copy instead of re-ranking billions of searches. The lookup takes under a millisecond on Google's end."
+        },
+        {
+          "type": "flow",
+          "headline": "What happens when you type a character",
+          "body": "Most requests end at step 3, a [[cache hit|when the requested data is already stored in the cache and returned immediately]]. Step 4 is a [[cache miss|when the data is not in the cache and must be computed fresh]], which happens mainly for rare or brand-new partial queries.",
+          "steps": [
+            {
+              "label": "You type a character",
+              "detail": "Keystroke fires a request to Google's servers"
+            },
+            {
+              "label": "Server checks the cache",
+              "detail": "Looks up stored suggestion list for your partial query"
+            },
+            {
+              "label": "Cache hit: return instantly",
+              "detail": "Pre-built list sent back in under 1ms on the server"
+            },
+            {
+              "label": "Cache miss: compute fresh",
+              "detail": "Rare: ranks from recent search logs, takes much longer"
+            },
+            {
+              "label": "New result stored in cache",
+              "detail": "Saved so the next person with the same partial query gets it instantly"
+            },
+            {
+              "label": "Suggestions appear on screen",
+              "detail": "Full [[round-trip|time for a request to travel from your device to the server and back]] completes in under 100ms"
+            }
+          ]
+        },
+        {
+          "type": "chart",
+          "headline": "Why caching makes autocomplete possible",
+          "chartType": "bar",
+          "title": "Approximate server-side time per request (ms)",
+          "data": [
+            {
+              "label": "Read from cache",
+              "value": 1,
+              "unit": "ms"
+            },
+            {
+              "label": "Query a search index",
+              "value": 50,
+              "unit": "ms"
+            },
+            {
+              "label": "Re-rank from raw search logs",
+              "value": 400,
+              "unit": "ms"
+            }
+          ],
+          "body": "A cache read is hundreds of times faster than recomputing suggestions from scratch. At 99,000 queries per second, that gap determines whether the feature is possible at all."
+        },
+        {
+          "type": "quiz",
+          "body": "",
+          "question": "You type 'why is the sky' and Google finds a stored suggestion list for that exact partial query. What just happened?",
+          "options": [
+            "A cache hit: the server returned a pre-built copy without any fresh computation",
+            "A cache miss: the server recomputed the suggestions and then stored the new result",
+            "A cache refresh: the server compared the stored copy to live results and updated it"
+          ],
+          "correctIndex": 0,
+          "explanation": "A cache hit means the data was already stored and came back immediately, with no ranking or scanning work done at all. The expensive computation happened earlier, and this request just collected the benefit.",
+          "optionExplanations": [
+            "",
+            "A cache miss is the opposite: the data was not yet stored, so the server had to compute it and then save it for next time. Finding existing stored data is a hit, not a miss.",
+            "Caches do not compare stored copies to live results on every read. That would require doing the expensive work anyway, defeating the purpose. They return the stored copy until it expires."
+          ]
+        },
+        {
+          "type": "misconception",
+          "body": "Once Google caches a suggestion list, it serves the same one forever. Search trends cannot change the results until you manually clear the cache."
+        },
+        {
+          "type": "insight",
+          "headline": "Every cache entry has an expiration date",
+          "body": "Cache entries carry a [[TTL|time-to-live: how long a stored copy stays valid before it is discarded and the next request triggers a fresh computation]]. When Google's suggestion entry for 'why is' reaches its TTL, the next keystroke computes a fresh ranking and stores the new result. This is how a breakout news story eventually surfaces in autocomplete, usually within minutes."
+        },
+        {
+          "type": "quiz",
+          "contrast": true,
+          "body": "",
+          "question": "Google's autocomplete cache has a TTL of 10 minutes; a sports-score site's headline cache has a TTL of 6 hours. A major upset happens in a live game. Which service shows users the outdated result for longer, and why?",
+          "options": [
+            "The sports-score site, because its 6-hour TTL keeps the stored copy valid for hours before a fresh fetch",
+            "Google's autocomplete, because a shorter TTL means it checks the source less often"
+          ],
+          "correctIndex": 0,
+          "explanation": "A longer TTL means the stored copy stays valid longer before expiring and triggering a fresh computation. The sports site's 6-hour entry will serve the wrong score for up to 6 hours; Google's 10-minute entry corrects itself within minutes.",
+          "optionExplanations": [
+            "",
+            "A shorter TTL causes the cache to expire sooner and refetch more often, not less. Google's 10-minute TTL means it recovers from stale data quickly, the opposite of slower."
+          ]
+        },
+        {
+          "type": "reward",
+          "body": "Every time you see suggestions appear before you have finished typing, in Google, in your IDE, in a maps app, a cache is doing the work. Google's autocomplete alone handles billions of keystroke requests a day without ranking a single search log in real time. You have been the beneficiary of pre-computed answers your entire digital life; now you know what makes them instant."
+        }
+      ],
+      "xpReward": 10,
+      "orderIndex": 0
+    },
+    {
+      "id": "cache-mixed",
+      "conceptId": "cache",
+      "type": "mixed",
+      "cards": [
+        {
+          "type": "context",
+          "headline": "Next song, zero wait",
+          "body": "Spotify knows your next track before you tap it. While the current song plays, the app quietly fetches that track's audio bytes and holds them in device memory. When you press next, playback starts in under 100 milliseconds, not the 1-2 seconds a cold network request would take."
+        },
+        {
+          "type": "misconception",
+          "body": "A [[cache|stored copy of data kept nearby so it can be served without repeating the original fetch]] only makes sense for content that never changes, like images or web pages. Anything that could be updated, like an audio file, has to be fetched fresh every time."
+        },
+        {
+          "type": "insight",
+          "headline": "Stable long enough is all that matters",
+          "body": "Spotify's preloaded audio bytes are a cache. A song file will not change while you are listening to it, so holding a local copy for three to four minutes is perfectly safe. A cache works whenever data stays stable long enough to be worth storing, not only when it never changes at all."
+        },
+        {
+          "type": "flow",
+          "headline": "Hit or miss",
+          "body": "A [[cache hit|when requested data is found in the stored copy, so no network fetch is needed]] costs almost nothing. A [[cache miss|when no stored copy exists, so the data must be fetched from the original source]] triggers the full round trip, then saves the result so the next request is a hit.",
+          "steps": [
+            {
+              "label": "Request arrives",
+              "detail": "Play next track triggered"
+            },
+            {
+              "label": "Check device memory",
+              "detail": "Is the audio already stored?"
+            },
+            {
+              "label": "Cache hit",
+              "detail": "Copy found: playback starts in under 100ms"
+            },
+            {
+              "label": "Cache miss",
+              "detail": "No copy: fetch audio bytes from Spotify servers (1-2s)"
+            },
+            {
+              "label": "Store the result",
+              "detail": "Save audio bytes in device memory"
+            },
+            {
+              "label": "Playback starts",
+              "detail": "Song plays; preloading of the next track begins"
+            }
+          ]
+        },
+        {
+          "type": "quiz",
+          "body": "",
+          "question": "When Spotify finds the next track's audio bytes already in device memory, what happens to the network request?",
+          "options": [
+            "The network request is skipped entirely: the stored copy is returned as a cache hit",
+            "The request still goes to Spotify's servers to confirm the local copy is current",
+            "The device fetches the track again in the background to refresh the stored copy"
+          ],
+          "correctIndex": 0,
+          "explanation": "That is a cache hit in action. The stored copy is returned directly without any network involvement, which is why the transition feels instant.",
+          "optionExplanations": [
+            "",
+            "Checking the server for freshness still requires a network round trip, which adds the exact latency the cache was meant to avoid. Spotify trusts the local copy for the duration of a normal listening session.",
+            "Refetching in the background wastes bandwidth and adds no benefit: the copy is already ready to play. The cache avoids the fetch entirely, not just the wait."
+          ]
+        },
+        {
+          "type": "diagram",
+          "variant": "sequence",
+          "headline": "How Spotify preloads the next track",
+          "nodes": [
+            {
+              "id": "listener",
+              "label": "Listener"
+            },
+            {
+              "id": "app",
+              "label": "Spotify App"
+            },
+            {
+              "id": "mem",
+              "label": "Device Memory"
+            },
+            {
+              "id": "srv",
+              "label": "Spotify Servers"
+            }
+          ],
+          "edges": [
+            {
+              "from": "app",
+              "to": "srv",
+              "label": "1. fetch next track"
+            },
+            {
+              "from": "srv",
+              "to": "app",
+              "label": "2. audio bytes"
+            },
+            {
+              "from": "app",
+              "to": "mem",
+              "label": "3. store"
+            },
+            {
+              "from": "listener",
+              "to": "app",
+              "label": "4. tap next"
+            },
+            {
+              "from": "app",
+              "to": "mem",
+              "label": "5. cache hit lookup"
+            },
+            {
+              "from": "mem",
+              "to": "app",
+              "label": "6. bytes ready"
+            },
+            {
+              "from": "app",
+              "to": "listener",
+              "label": "7. instant playback"
+            }
+          ]
+        },
+        {
+          "type": "insight",
+          "headline": "Every cache copy has an expiry",
+          "body": "Spotify can trust its copy for the length of a song. But for data that changes often, like a live sports score, caches use a [[TTL|time to live: how long a stored copy is kept before it expires and must be refetched]]. A copy that outlasts its usefulness is called [[stale|outdated: a cached copy that no longer reflects the current source data]], and the TTL controls how long staleness can linger before a fresh fetch replaces it."
+        },
+        {
+          "type": "compare",
+          "headline": "Streaming with and without a preload cache",
+          "left": {
+            "label": "No cache",
+            "points": [
+              "Network request fires when you tap next",
+              "1-2 second gap between tracks on mobile",
+              "Silence on a spotty connection",
+              "Every replay costs another fetch"
+            ]
+          },
+          "right": {
+            "label": "With preload cache",
+            "points": [
+              "Audio bytes already in device memory",
+              "Under 100ms track transition",
+              "Playback survives a brief network drop",
+              "Replay is instant: copy is already local"
+            ]
+          }
+        },
+        {
+          "type": "quiz",
+          "contrast": true,
+          "body": "",
+          "question": "A music app caches album art with a 30-second TTL; a podcast app caches episode thumbnails with a 24-hour TTL. A creator updates their artwork mid-morning. Which app shows listeners the old image longer, and why?",
+          "options": [
+            "The podcast app, because its 24-hour TTL keeps the stale copy valid until well into the next day",
+            "The music app, because a short TTL means it checks the source less frequently"
+          ],
+          "correctIndex": 0,
+          "explanation": "The longer the TTL, the longer a stale copy can linger. The podcast app's 24-hour window means the new artwork might not reach listeners until the following morning. The music app recovers in 30 seconds.",
+          "optionExplanations": [
+            "",
+            "A shorter TTL causes the cache to expire and refetch MORE often, not less. The music app's 30-second TTL means it recovers from the stale image in half a minute, far faster than the podcast app."
+          ]
+        },
+        {
+          "type": "chart",
+          "headline": "Where speed comes from",
+          "chartType": "bar",
+          "title": "Approximate time to start audio playback (ms)",
+          "data": [
+            {
+              "label": "From device memory (cached)",
+              "value": 1,
+              "unit": "ms"
+            },
+            {
+              "label": "From device disk (uncached)",
+              "value": 20,
+              "unit": "ms"
+            },
+            {
+              "label": "WiFi network fetch",
+              "value": 150,
+              "unit": "ms"
+            },
+            {
+              "label": "Mobile 4G fetch",
+              "value": 400,
+              "unit": "ms"
+            }
+          ],
+          "body": "Device memory is not just faster than the network, it is in a different order of magnitude. That gap is what makes every caching strategy worth building in the first place."
+        },
+        {
+          "type": "reward",
+          "body": "Every seamless song transition on Spotify, every instant YouTube video load, every frictionless Netflix autoplay runs on the same trick: fetch it early, keep it close, and the wait disappears. Spotify reportedly keeps several upcoming tracks preloaded at once so your queue feels instant even when your signal drops. You have been the beneficiary of someone else's careful timing your entire streaming life."
+        }
+      ],
+      "xpReward": 10,
+      "orderIndex": 1
+    },
+    {
+      "id": "cache-quiz",
+      "conceptId": "cache",
+      "type": "quiz",
+      "cards": [
+        {
+          "type": "context",
+          "headline": "Ten million people, one article",
+          "body": "A political scandal breaks, and a news article gets 10 million hits in two hours. Cloudflare, a [[CDN|Content Delivery Network: a global network of servers that caches content close to users]], has stored a copy of that article's HTML at each [[edge node|a CDN server placed geographically near users]] in 300 cities. The [[origin server|the central server that generates and owns the real content]] barely flinches; without those stored copies, it would be overwhelmed."
+        },
+        {
+          "type": "compare",
+          "headline": "Same article, two different outcomes",
+          "left": {
+            "label": "No edge cache",
+            "points": [
+              "Origin handles every request directly",
+              "200ms+ round-trip from distant users",
+              "10 million hits = 10 million DB calls",
+              "Traffic spike crashes the server"
+            ]
+          },
+          "right": {
+            "label": "Cloudflare edge cache",
+            "points": [
+              "Stored copy at 300+ city locations",
+              "Under 10ms from the nearest edge",
+              "10 million hits = a handful of origin calls",
+              "Spike absorbed; origin stays quiet"
+            ]
+          }
+        },
+        {
+          "type": "insight",
+          "headline": "One fetch. Millions of free answers.",
+          "body": "That stored copy has a name: a [[cache|copy of data kept somewhere fast so you avoid repeating an expensive fetch or computation]]. Cloudflare fetches the article from the origin once, stores it at each edge node, and hands back that copy to every visitor until it expires. Ten million requests become a few hundred origin fetches."
+        },
+        {
+          "type": "diagram",
+          "variant": "architecture",
+          "headline": "CDN cache topology",
+          "body": "Most requests end in a [[cache hit|a request answered from the edge's stored copy, without contacting the origin]]. Only a [[cache miss|a request that finds no stored copy at the edge, requiring a fetch from the origin]] reaches the origin server.",
+          "nodes": [
+            {
+              "id": "user",
+              "label": "User"
+            },
+            {
+              "id": "edge",
+              "label": "CDN Edge"
+            },
+            {
+              "id": "origin",
+              "label": "Origin"
+            },
+            {
+              "id": "db",
+              "label": "Database"
+            }
+          ],
+          "edges": [
+            {
+              "from": "user",
+              "to": "edge",
+              "label": "request"
+            },
+            {
+              "from": "edge",
+              "to": "user",
+              "label": "hit: HTML (~5ms)"
+            },
+            {
+              "from": "edge",
+              "to": "origin",
+              "label": "miss only"
+            },
+            {
+              "from": "origin",
+              "to": "db",
+              "label": "query"
+            },
+            {
+              "from": "origin",
+              "to": "edge",
+              "label": "HTML"
+            }
+          ]
+        },
+        {
+          "type": "quiz",
+          "body": "",
+          "question": "When a user requests the viral article and the CDN edge node has a stored copy, what does the origin server do?",
+          "options": [
+            "The edge node returns the stored copy; the origin server is never contacted",
+            "The origin regenerates the page and the CDN delivers it faster to the user",
+            "The origin verifies the stored copy is still accurate before the CDN serves it"
+          ],
+          "correctIndex": 0,
+          "explanation": "When the edge has a stored copy, it answers entirely from that copy, so the origin does zero work. This is what lets a 300-city network absorb 10 million requests while the origin handles only a handful. The cache's entire value is the work it never has to do.",
+          "optionExplanations": [
+            "",
+            "A cache hit bypasses the origin completely; it doesn't regenerate anything. The CDN's job is to skip origin work entirely, not just speed up delivery from it.",
+            "The cache doesn't check back with the origin on every request; that would eliminate the speed benefit. The stored copy is served as-is until it expires."
+          ]
+        },
+        {
+          "type": "misconception",
+          "body": "Once Cloudflare caches a page, every visitor sees that same stale version until someone manually clears it."
+        },
+        {
+          "type": "insight",
+          "headline": "Freshness is built in",
+          "body": "Every cache entry carries a [[TTL|Time To Live: how long a stored copy is kept before it expires and must be refetched]] set by the server. When the TTL runs out, the next request goes to the origin and gets a fresh copy. A breaking news page might carry a 30-second TTL; a static logo might carry a year."
+        },
+        {
+          "type": "flow",
+          "headline": "Cache read path",
+          "steps": [
+            {
+              "label": "Request arrives",
+              "detail": "Routed to the nearest CDN edge node"
+            },
+            {
+              "label": "Check for stored copy",
+              "detail": "Lookup takes about 1ms"
+            },
+            {
+              "label": "Cache hit: serve immediately",
+              "detail": "Returns HTML in under 10ms; origin is never contacted"
+            },
+            {
+              "label": "Cache miss: fetch from origin",
+              "detail": "Round-trip of 200ms or more"
+            },
+            {
+              "label": "Store with TTL",
+              "detail": "Edge keeps the copy until the TTL expires"
+            },
+            {
+              "label": "Next visitor gets a hit",
+              "detail": "Back to step 3 for everyone after"
+            }
+          ]
+        },
+        {
+          "type": "stat",
+          "headline": "The real scale",
+          "value": "45M",
+          "unit": "HTTP requests per second served from Cloudflare's network",
+          "context": "Cloudflare handles over 45 million HTTP requests per second, most answered at the edge without touching an origin server. That viral news article is a rounding error in their daily traffic."
+        },
+        {
+          "type": "quiz",
+          "contrast": true,
+          "body": "",
+          "question": "Site A caches its breaking-news articles with a 30-second TTL; Site B caches its articles with a 24-hour TTL. A reporter corrects a factual error in the database. Which site shows visitors the wrong version for longer, and why?",
+          "options": [
+            "Site B, because its stored copy stays valid for 24 hours before the edge refetches from the origin",
+            "Site A, because a shorter TTL means the cache checks the origin less frequently"
+          ],
+          "correctIndex": 0,
+          "explanation": "TTL controls how long a stale copy lingers. A 24-hour TTL means the correction won't reach visitors until the old copy expires, up to a day later. A 30-second TTL means the fix propagates within half a minute.",
+          "optionExplanations": [
+            "",
+            "A shorter TTL means the cache expires sooner and refetches more often, not less. Site A's edge nodes pick up the corrected article every 30 seconds; Site B's can serve the wrong version for an entire day."
+          ]
+        },
+        {
+          "type": "reward",
+          "headline": "You've been relying on this your whole digital life",
+          "body": "Every fast page you've ever loaded, from news to social media, was probably a cached copy at a nearby edge node, not a fresh round-trip to a database. When a story goes viral, Cloudflare's 300-city network absorbs almost all of the traffic before the origin ever sees a request. The cache is what stands between a traffic spike and a crashed server, and it has been protecting you all along."
+        }
+      ],
+      "xpReward": 10,
+      "orderIndex": 2
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+Copyright 2026 Noah Guerin
+
+SPDX-License-Identifier: CC-BY-NC-4.0
+
+The learning content in this directory (concept and lesson JSON) is licensed under
+the Creative Commons Attribution-NonCommercial 4.0 International License.
+
+You are free to share and adapt this content for NON-COMMERCIAL purposes, with
+attribution. You may NOT use it for commercial purposes without permission.
+
+Full license text: https://creativecommons.org/licenses/by-nc/4.0/legalcode
+
+Note: this NonCommercial license applies to the content under content/ ONLY. The
+application code in this repository is licensed separately under Apache-2.0 (see
+the LICENSE file at the repository root).
+
+-------------------------------------------------------------------------------
+NOTE (remove this block before publishing): paste the full canonical CC BY-NC 4.0
+legal text from the URL above, or link to it. GitHub's license picker does not
+offer CC content licenses, so add the full text manually.
+-------------------------------------------------------------------------------

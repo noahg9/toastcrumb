@@ -1,0 +1,5 @@
+# Keeps content/concepts/ tracked even when it has no lessons.
+# Git doesn't track empty directories, so without this file a cleared content
+# set would make the folder vanish on checkout and the build would crash with
+# ENOENT (scandir content/concepts). Generators/loaders only read *.json, so
+# this file is ignored by them. Safe to leave here permanently.
