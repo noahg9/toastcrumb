@@ -66,6 +66,15 @@ pnpm dev:api    # api only
 - Web: http://localhost:3000
 - API health: http://localhost:4000/api/health
 
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md) — system shape, boundaries, content delivery
+- [Data model](docs/DATABASE_SCHEMA.md) — the dynamic-state tables
+- [Content system](docs/CONTENT_SYSTEM.md) — concept/lesson/card shapes and authoring rules
+- [Concept graph](docs/CONCEPT_GRAPH.md) — how concepts link and unlock
+- [Game loop](docs/GAME_LOOP.md) — XP, streaks, review, daily challenge
+- [UI guidelines](docs/UI_GUIDELINES.md) — design direction
+
 ## License
 
 Code is licensed under the [Apache License 2.0](LICENSE). The sample learning content under
