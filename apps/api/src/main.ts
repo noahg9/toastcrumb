@@ -23,7 +23,6 @@ async function bootstrap() {
   // Bind to 0.0.0.0 (not the default host) so container platforms like
   // Railway/Fly can reach the app for routing and health checks.
   await app.listen(port, "0.0.0.0");
-  // eslint-disable-next-line no-console
   console.log(`toastcrumb api listening on 0.0.0.0:${port}/api`);
 }
 

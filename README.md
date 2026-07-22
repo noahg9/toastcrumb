@@ -20,12 +20,20 @@ hosted product and are not part of this repo.
 | `packages/types` | Shared domain types + content rules | TypeScript |
 | `content/` | Static concept/lesson JSON (**sample set** — see note below) | JSON |
 
-## Sample content
+## Open-core: how content works
 
-`content/concepts/` ships with a small, self-contained sample (the caching cluster) so the
-app is fully functional from a clean clone. Each file is one `Concept` matching the type in
-`packages/types`. Drop additional `content/concepts/<id>.json` files and they appear in the
-app automatically.
+This is the open application. The **full concept library and the pipeline that generates it
+are proprietary** and live in a private repository — they're the product, not the code.
+
+- `content/concepts/` ships with a small, self-contained **sample** (the caching cluster) so
+  the app is fully functional from a clean clone with no secrets. Each file is one `Concept`
+  matching the type in `packages/types`; drop in more `content/concepts/<id>.json` files and
+  they appear automatically.
+- In the **hosted deployment**, the web build overlays the full library:
+  `scripts/fetch-content.mjs` runs before `next build` and, when a `CONTENT_REPO_TOKEN` is
+  set, pulls `content/` from the private repo. Without the token it's a no-op and the sample
+  is used. See that file's header for the env vars (`CONTENT_REPO_TOKEN`, `CONTENT_REPO`,
+  `CONTENT_REPO_REF`).
 
 ## Prerequisites
 

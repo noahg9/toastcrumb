@@ -83,7 +83,7 @@ export default async function DatedDailyPage({
     case "malformed":
     case "pre-epoch":
       notFound();
-    // eslint-disable-next-line no-fallthrough -- notFound() throws; unreachable.
+    // notFound() throws, so the cases below are unreachable from here.
     case "future":
     case "today":
       // One canonical URL for today; future days must not leak tomorrow's answer.
