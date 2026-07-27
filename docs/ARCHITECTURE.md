@@ -57,6 +57,7 @@ toastcrumb/
 │   │       ├── prisma/             # PrismaModule + PrismaService
 │   │       ├── health/             # GET /api/health
 │   │       ├── auth/               # JWT + Google OAuth, RolesGuard
+│   │       ├── admin/              # superadmin console API (guarded)
 │   │       ├── users/              # identity, XP, streaks, event ingest
 │   │       ├── progress/           # per-concept progress
 │   │       └── reviews/            # FSRS spaced-repetition state
@@ -136,6 +137,139 @@ the operator console aggregates. It honors the system's invariants:
   free-text answers, emails, or names.
 - **Retention is deferred.** The table grows unbounded; a prune/rollup policy is a
   conscious future concern (see [`DATABASE_SCHEMA.md`](DATABASE_SCHEMA.md)).
+
+## Admin API (Epic 14)
+
+The server side of the internal operator console lives in `apps/api/src/admin/`. It is the
+**first and only** guard-enforced surface in the app; every other route stays open by
+design (see [Authorization](#authorization)).
+
+### Endpoints
+
+All under the global `/api` prefix.
+
+| Method   | Route                             | Purpose                                              |
+| -------- | --------------------------------- | ---------------------------------------------------- |
+| `GET`    | `/admin/metrics/overview`         | KPI aggregates: users, signups, DAU/WAU/MAU, streaks, quiz accuracy |
+| `GET`    | `/admin/metrics/retention`        | Weekly signup cohorts × subsequent-week activity      |
+| `GET`    | `/admin/users`                    | Paginated, case-insensitive search over email/name/id |
+| `GET`    | `/admin/users/:id`                | One user: progress, review summary, recent activity   |
+| `PATCH`  | `/admin/users/:id`                | Edit `name` / `email`                                 |
+| `POST`   | `/admin/users/:id/reset-progress` | Wipe learning state, keep the account                 |
+| `DELETE` | `/admin/users/:id`                | Delete the user (cascades their rows)                 |
+| `GET`    | `/admin/content/difficulty`       | Per-question difficulty telemetry as JSON             |
+
+Deliberately **absent**: impersonate / login-as, and any role mutation.
+
+### Guards are declared at the controller class level
+
+`@UseGuards(JwtAuthGuard, RolesGuard)` + `@Roles("superadmin")` sit on `AdminController`
+itself, never on individual methods. Every handler here returns all-user PII or performs a
+destructive mutation, so **one unguarded handler is a full-database leak**. Class-level
+placement makes protection the default: a handler added later inherits it, and there is no
+per-method annotation to forget. The uniform matrix is *no token → 401 · `role:"user"` →
+403 · `role:"superadmin"` → 200*.
+
+### Role changes are script-only
+
+`PATCH /admin/users/:id` **rejects a `role` key with a 400** rather than ignoring it.
+Promotion and demotion happen only through `pnpm role:set`, so **no HTTP request can change
+anyone's role** — not even from an authenticated superadmin session.
+
+That is a statement about *roles*, not about account access. `email` is a login identifier,
+so editing it is security-relevant: because nothing in the app verifies an email address,
+pointing a user's address at one you control was once enough to take over their account via
+Google sign-in. Account linking now refuses to attach a Google identity to a row that
+already holds credentials of its own, which closes that path; a verified-email flag is the
+proper long-term fix. Treat email edits as sensitive, and note the audit row records only
+*which fields* changed, not their values.
+
+### Lockout guards
+
+Three refusals protect the console from being made unusable, since `role` is not editable
+over HTTP and recovery otherwise needs shell access:
+
+- **Deleting the account you are signed in as** → 400.
+- **Deleting the last remaining superadmin** → 400, re-counted inside a transaction so two
+  admins deleting each other concurrently cannot both succeed.
+- **Resetting your own progress** → 400 (a mis-click that would wipe the operator's own
+  learning state).
+
+### Metrics are aggregated on read, and label their own source
+
+Metrics are computed with Prisma aggregation / `groupBy` plus a little raw SQL. There is
+**no rollup table** — a conscious deferral, to add only when read latency demands it.
+
+Activity metrics carry a `source` field:
+
+- **`"events"`** — the window starts at or after the point where `Event` data is complete,
+  so it is answered from that stream (unioned with `QuizOutcome`, because event ingest is
+  fire-and-forget and can silently drop a genuinely active learner).
+- **`"approx"`** — the window reaches back before it, and is approximated from
+  `User.lastActiveDate`, `Progress.lastAccessed` and `QuizOutcome.createdAt`. Those first
+  two record only the *most recent* visit, so historical windows under-count.
+
+The boundary is **not** the migration timestamp. That value is only a floor — it records
+when the migration was authored, not when events began in a given database, so a deploy that
+applied it later would have had event-less windows labelled exact. The effective boundary is
+`max(floor, MIN(Event.createdAt))`, read from the database and reported as
+`eventTrackingStart`, and `EVENT_TRACKING_START_OVERRIDE` in the environment wins over both.
+
+**Operator activity is excluded from product metrics.** `admin_action` audit rows are real
+`Event` rows owned by the acting admin, so every activity aggregation filters out
+server-only event names — otherwise using the console would make the operator count as an
+active learner, and two actions on two days would make them a returning one.
+
+The approximation is **never presented as exact**: each metric ships a `note` explaining
+the caveat, and the retention response carries an explicit `simplifications` list (weeks are
+Monday-start UTC; the in-flight week is flagged `partial`). Period 0 is the signup week, and
+what that means depends on the source — near-100% under `"events"`, but *not* under
+`"approx"`, where the fallback signals only retain each user's latest visit and a low period
+0 is a measurement artefact rather than a signup problem. The response states whichever
+applies rather than asserting the `"events"` reading unconditionally.
+
+### The difficulty aggregation has one implementation
+
+`apps/api/src/admin/difficulty.ts` owns the thresholds, the pretest exclusion and the flag
+maths. Both `GET /admin/content/difficulty` **and** the offline
+`pnpm report:difficulty` script call it, so the console and the editorial report cannot
+give different answers. The script is now only a formatter.
+
+### Two caveats worth knowing
+
+- **The content join reads `/content` server-side.** This is the one admin path that
+  touches static content from the server. It is a read for *reporting* — turning an opaque
+  `questionId` hash back into readable question text — not runtime content serving, so the
+  static-content invariant holds. When the directory is absent the join degrades to empty
+  and the numbers stay correct; only the labels are lost. The response reports both
+  `contentEntriesIndexed` (how many questions content offered) and `joinResolved` (how many
+  actually matched) — the two differ precisely when the join is systemically broken, e.g. if
+  `questionId`'s hashing ever changes, which would otherwise show a healthy index alongside
+  silently unlabelled results.
+- **`difficulty.ts` imports `questionId` from `@toastcrumb/types` at runtime**, against the
+  `import type`-only convention below. Deliberate: the join must use the *exact* hash the
+  client stamps, and a duplicated copy that drifted would break it silently. Note this
+  makes the API's runtime dependency on the shared package real — it already was, via the
+  event-name catalog in `users/`, and it resolves only on a Node that can load the
+  package's TypeScript entrypoint. Worth resolving properly by building the package.
+
+### Every mutation is audited
+
+Reset, delete and edit each write a server log line first (unloseable) and then an
+`admin_action` `Event` row. The row is owned by **the admin, not the target**, so it
+survives the very deletion it records. `props` carries the action, the target id and
+counts only — no emails or names, honoring the PII-free `Event` contract. `admin_action` is
+a **server-only** event name: the unauthenticated ingest endpoint rejects it, because a
+forgeable audit trail is worthless.
+
+Two known limits, recorded rather than implied away:
+
+- **Audit rows do not outlive the admin who wrote them.** `Event.userId` cascades on delete,
+  so deleting a former admin erases their audit history. Fixing it properly needs a separate
+  audit table (or a nullable owner); until then the server log line is the durable trace.
+- **Reads are not audited.** Only the three mutations are. `GET /admin/users` returns every
+  user's email and name, so a leaked superadmin token could page the whole table leaving no
+  record beyond HTTP access logs.
 
 ## Data flow
 
