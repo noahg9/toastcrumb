@@ -27,6 +27,19 @@ Spaced review:
 - Concepts become due for review on an FSRS-6 schedule; reviewing keeps knowledge fresh
   without re-playing whole lessons
 
+Daily anchor:
+
+- The learner names a concrete cue time ("after my morning coffee" → 08:00), asked once on
+  the reward screen after their **first** completed concept and editable on `/learn`. Stored
+  as `User.reminderAnchorMinutes` / `reminderTimezone`.
+- At most **one** emphasised nudge per local day, only after that time has passed, and only
+  when reviews are genuinely due — the message states the real number of due concepts. A
+  passive due-count line may show whenever work is actually waiting; when nothing is due,
+  nothing is shown at all.
+- The nudge never invokes the streak and never threatens a loss. A lapse simply leaves
+  overdue reviews waiting — consistent with **No punishment** below. What the learner is
+  invited to protect is real graph knowledge, never a farmable number.
+
 ## Goals
 
 - **Primary:** complete at least one concept per day

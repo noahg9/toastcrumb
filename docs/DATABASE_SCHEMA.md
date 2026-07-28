@@ -20,6 +20,17 @@ types in `@toastcrumb/types`.
 - `lastActiveDate` — last UTC day a lesson was completed; drives the streak boundary
 - `completedConcepts[]` — concept ids the user has finished
 - `currentNode` — current position in the concept graph (a concept id), or null
+- `reminderAnchorMinutes` / `reminderTimezone` — the **daily habit anchor**: the learner's
+  self-chosen cue time ("after my morning coffee" → 08:00), stored as minutes after
+  **local** midnight (0–1439) plus the IANA zone it was chosen in (e.g.
+  `"Europe/Brussels"`, captured silently from the browser, never asked). Deliberately not
+  a UTC instant, which would drift with DST and be unusable for a server-side send. Both
+  null = no anchor set, which is the default and means nothing fires. Written only by
+  `PUT /users/:id/reminder`; clearing the minutes clears the zone. Read today by the
+  in-app "reviews due" surface on `/learn` (which fires at most one emphasised nudge per
+  local day, and only when reviews are genuinely due); the stored zone exists so the daily
+  email mirror can later compute the same local time server-side. A **preference, not
+  progress** — an admin progress reset leaves it untouched.
 
 ## Progress
 
