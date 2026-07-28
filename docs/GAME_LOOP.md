@@ -40,6 +40,21 @@ Daily anchor:
   overdue reviews waiting — consistent with **No punishment** below. What the learner is
   invited to protect is real graph knowledge, never a farmable number.
 
+Quiet 7-day nod:
+
+- Once, **≥7 whole days** after `User.createdAt`, `/learn` shows one plain line —
+  "_N_ concept(s) are holding on their own" — and never shows it again in that browser
+  (a `localStorage` one-shot flag, not a server-side record). No celebration screen, no day
+  count in the copy, no streak reference: an acknowledgement, not a milestone.
+- Denominated in concepts whose live FSRS mastery tier (`deriveMastery`) is `reviewing` **or**
+  `durable` — i.e. past `learning` — **not** strict `durable`. `durable` requires FSRS
+  `stability >= 21` days, which the real scheduler (all-`Good` grades, since `deriveGrade`
+  never returns `Easy`) doesn't reach until roughly day 8–14 depending on review cadence and
+  FSRS fuzz — a strict-`durable` count at day 7 is near-zero and non-deterministic, not a
+  number worth building a mechanic on. `reviewing` (`stability >= 7`, `Review` state) is
+  reliably reachable by day 7 on realistic cadences, so the nod counts that wider tier instead
+  of moving the `durable` boundary itself.
+
 ## Goals
 
 - **Primary:** complete at least one concept per day
