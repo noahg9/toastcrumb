@@ -62,7 +62,7 @@ toastcrumb/
 │   │       ├── progress/           # per-concept progress
 │   │       └── reviews/            # FSRS spaced-repetition state
 │   └── web/                        # Next.js 15 App Router
-│       ├── app/                    # routes: /, /learn, /lesson, /review, /daily, /session, /graph, /account, /auth
+│       ├── app/                    # routes: /, /learn, /lesson, /review, /daily, /session, /graph, /account, /auth, /admin
 │       ├── components/
 │       ├── lib/                    # content loader, API client, graph, FSRS, analytics
 │       └── content/                # build-time copy of /content (gitignored)
@@ -270,6 +270,44 @@ Two known limits, recorded rather than implied away:
 - **Reads are not audited.** Only the three mutations are. `GET /admin/users` returns every
   user's email and name, so a leaked superadmin token could page the whole table leaving no
   record beyond HTTP access logs.
+
+### Superadmin console (web)
+
+`apps/web/app/admin/` is the client for the API above: an overview dashboard (KPI tiles +
+signup/streak charts), a retention cohort grid, a user-management table with search and
+pagination, a user-detail page with edit/reset/delete mutations, and a content-difficulty
+view. `apps/web/lib/admin-api.ts` holds typed wrappers for all eight endpoints; unlike the
+learner-facing wrappers in `lib/api.ts`, they distinguish 401/403/404/409/400 so a failed
+mutation surfaces the API's own message rather than disappearing silently. Wire types live in
+`@toastcrumb/types` under an `Admin*` prefix — 14.3 deliberately shipped without them, so this
+is their first and only declaration.
+
+**The route gate is client-side and UX only.** The web app has no `middleware.ts` and no
+server-side session anywhere — auth is a `localStorage` JWT read in the browser. `app/admin/`
+hides itself (and its nav entry) from anyone whose fetched user row isn't `role:
+"superadmin"`; the real boundary is the API's `RolesGuard` above, which re-checks on every
+request regardless of what the client renders. The gate deliberately reads the role from
+`GET /users/:id` — a fresh DB read — and never from the JWT's `role` claim, which is minted at
+sign-in and goes stale the moment an operator is promoted or demoted.
+
+Three choices carry over from the API's own discipline once they reach the UI:
+
+- **Honest metric labeling.** Every `source: "events" | "approx"` value renders as a labeled
+  badge with its `note`; retention's `simplifications` and null/partial cohort cells (blank,
+  never `0%`) render as the API returns them, not simplified away.
+- **Destructive-action confirmation.** Reset and delete both require an explicit confirm step
+  naming the user and consequence, and are disabled outright on the signed-in admin's own row
+  — mirroring the API's self-reset/self-delete/last-superadmin refusals so an operator never
+  has to hit the 400 to learn the rule exists.
+- **No console self-pollution.** `PageViewTracker` (the app-wide `page_view` emitter mounted
+  in the root layout) is suppressed for any `/admin/*` path, for the same reason the API
+  excludes `admin_action` rows from its own aggregations: without it, browsing the console
+  would count as learner activity and inflate the very DAU/retention numbers it displays.
+
+Charts are dependency-free inline SVG rather than a charting library — the app has no dark
+mode and only a handful of chart shapes (two trend bars, a streak histogram, a retention
+heat-table), so a small hand-built set was cheaper than a new runtime dependency for an
+operator-only page.
 
 ## Data flow
 
