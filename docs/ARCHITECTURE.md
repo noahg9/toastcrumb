@@ -102,6 +102,23 @@ secrets. In the hosted deployment, `scripts/fetch-content.mjs` runs before `next
 and overlays the full library from a private source when a token is configured; without a
 token it is a no-op and the committed sample is used.
 
+### SEO & social previews
+
+Every public, indexable page carries full canonical/Open Graph/Twitter metadata, following
+one shared pattern: `title`, `description`, `openGraph.{title,description,url,type:"website"}`,
+`twitter.{card:"summary_large_image",title,description}`, and `alternates.canonical` (via
+`getBaseUrl()`). This covers `/`, `/daily` (+ dated/archive variants), `/how-its-made`,
+`/lesson/[conceptId]` (every concept's lesson page), and `/learn` (the concept-graph skill
+tree). Each of these also has a dedicated `opengraph-image.tsx` route rendering a branded
+1200×630 PNG via the shared `renderDailyOg` builder — per-concept for lesson pages, static
+for `/how-its-made` and `/learn`.
+
+`sitemap.ts` lists every concept's `/lesson/[conceptId]` URL, but only those with at least
+one lesson (`lesson/page.tsx` 404s on a concept with zero lessons, so the sitemap filters
+to match rather than advertise a dead link). `robots.ts` disallows the non-indexable,
+per-user surfaces (`/auth/`, `/account/`, `/admin/`, `/review/`, `/session`) as a second,
+belt-and-suspenders layer alongside those pages' own per-page `noindex` metadata.
+
 ## Authorization
 
 The learner-facing surface is **open by design** — user and progress routes are
