@@ -106,3 +106,40 @@ or navigation.
 
 > **Retention is deferred, not built.** The event table grows unbounded; a prune/rollup
 > policy is a conscious future concern, named here rather than implemented now.
+
+## EmailSubscriber
+
+Email subscriber list for the daily-lesson mirror (the second product surface, Epic 12).
+Standalone — **not** a `User` row: subscribing needs only an email, no account. Single
+opt-in (no confirmation email); every send carries a mandatory one-click unsubscribe link.
+
+- `id`
+- `email` — unique, and stored normalized (`trim().toLowerCase()`). The unique index is
+  case-sensitive, so without normalization two casings of one address would be two active
+  subscriptions with two tokens, and unsubscribing via one would not stop the other.
+- `unsubscribeToken` — opaque bearer token embedded in the unsubscribe link; a separate
+  value from `id` so the link can be shared/leaked without exposing the subscriber's row id
+- `subscribedAt`
+- `unsubscribedAt` — null = active. Non-null = unsubscribed, but the row is **kept, not
+  deleted**, so a re-subscribe of the same address is an idempotent reactivation
+  (`unsubscribedAt` cleared, `unsubscribeToken` NOT rotated) with history intact
+- `createdAt`, `updatedAt`
+- Indexed on `unsubscribedAt`.
+
+## DailyEmailLog
+
+One row per UTC calendar day the daily-email cron has sent. A **global** marker (not
+per-subscriber, per-user `Event`, or `QuizOutcome`). The row is **claimed before the first send**,
+not written after the batch: `date` is the primary key, so the insert itself is the lock that
+makes the day single-winner across replicas and across a restart mid-day. A run that loses the
+race exits without sending anything.
+
+- `date` — `YYYY-MM-DD` (UTC), the primary key
+- `sentAt`
+- `recipientCount` — count of subscribers the cron *attempted* to reach that day, not just
+  successful sends. Because the row is claimed up front this is the active-subscriber count at
+  claim time, which is the same set the send loop iterates. It cannot distinguish "delivered to
+  N" from "failed N times" — a disabled mailer writes an identical row, so do not read this as
+  proof of delivery.
+- `challengeId` — the `DailyChallenge.id` (`${conceptId}:${lessonId}:${cardIndex}`) named in
+  that day's email, so a future debug/admin view can confirm what a given day's email sent

@@ -309,6 +309,85 @@ mode and only a handful of chart shapes (two trend bars, a streak histogram, a r
 heat-table), so a small hand-built set was cheaper than a new runtime dependency for an
 operator-only page.
 
+## Daily email mirror (Epic 12)
+
+A second product surface: the full daily challenge (question, options, revealed answer),
+mailed once a day to anyone who subscribes with just an email — no account needed.
+
+- **Daily-selection math lives in `@toastcrumb/types`, not just `apps/web`.** The pure
+  UTC-calendar-day → pool-index functions (`buildDailyPool`, `dailyChallengeIndex`,
+  `dailyChallengeNumber`, `challengeDateKey`, `publicChallenge`, the `DailyChallenge` /
+  `PublicDailyChallenge` types) moved from `apps/web/lib/daily.ts` into the shared types
+  package so the API can compute the exact same day's challenge as the web app without
+  importing across `apps/web` ↔ `apps/api`. `apps/web/lib/daily.ts` re-exports them
+  unchanged and keeps only its impure, content-reading wrappers.
+- **The API reads `/content` directly, a second independent reader.** `apps/api/src/mailer/daily-content.ts`
+  mirrors the admin difficulty report's `CONTENT_DIR` resolution (its own copy, not a
+  shared import — the two content readers are deliberately kept independent) and computes
+  today's **full** `DailyChallenge` (including `correctIndex`/`explanation`, unlike the
+  web's answer-stripped `PublicDailyChallenge`).
+  **The concept ORDER is part of that reader's contract, not an implementation detail:**
+  `buildDailyPool` appends in concept iteration order and `dailyChallengeIndex` indexes into
+  the result, so the API must reproduce `apps/web/lib/content.ts`'s final
+  `.sort((a, b) => a.difficulty - b.difficulty)` exactly — `readdir` order alone is
+  filesystem-dependent and diverged on every single pool position. Ties in `difficulty` still
+  resolve by `readdir` order in both readers; a shared deterministic ordering is open follow-up
+  work.
+- **Subscription is a standalone `EmailSubscriber` row, not a `User`.** Subscribing needs
+  only an email; there is no account, password, or JWT tie-in. `POST /api/subscribers`,
+  `GET /api/subscribers/unsubscribe?token=...` and `POST /api/subscribers/unsubscribe?token=...`
+  are all unauthenticated by design — a new, narrow resource with its own minimal validation,
+  not an extension of the `/users/:id` V1 posture. `POST /api/subscribers` is rate-limited
+  (`@nestjs/throttler`, guard scoped to this controller only) because it is an unauthenticated
+  write that creates a permanent mail recipient. Addresses are normalized (`trim().toLowerCase()`)
+  before storage, since Postgres unique indexes are case-sensitive and two casings of one
+  address would otherwise be two subscriptions with two unsubscribe tokens.
+- **Unsubscribe: the `GET` is non-mutating; the `POST` performs the opt-out.** Mail clients
+  and security gateways routinely prefetch links found in delivered mail, so a mutating GET
+  would silently unsubscribe people who never clicked. `GET` redirects to the web app's
+  `/unsubscribe?token=…` confirmation page, whose button issues the `POST`. The daily email
+  also carries RFC 8058 `List-Unsubscribe` + `List-Unsubscribe-Post: List-Unsubscribe=One-Click`
+  headers so a mail client's own native unsubscribe control works in one click — it POSTs,
+  which is why the header pair and the non-mutating GET must stay together. Unknown, stale,
+  missing and array-valued tokens all resolve without a 404 or 500.
+- **Links baked into outbound email come from `API_PUBLIC_URL`, not `WEB_APP_URL`.** The
+  unsubscribe route is a NestJS controller on the API origin (Railway), which is a different
+  origin from the web app (Vercel) in every environment; the web app has no `/api` rewrite and
+  no `app/api` directory, so a link built from `WEB_APP_URL` 404s. `apps/api/src/common/public-urls.ts`
+  holds both base-URL helpers in one place and strips trailing slashes (a trailing slash
+  otherwise produced `//daily`, which Next.js does not treat as the same route).
+- **Mailer: Resend**, behind a `MailerService` with one real implementation. If
+  `RESEND_API_KEY` is unset — **or set without `MAIL_FROM_ADDRESS`** — the service logs a
+  warning at boot and every send becomes a no-op that logs and resolves; local dev/CI/preview
+  environments need zero mailer credentials. This is a lower-severity missing-config path than
+  the JWT/Google fail-fast checks in `main.ts` (the app is fully usable with the mailer
+  disabled). A key present without a from-address is treated as *disabled* rather than
+  enabled-and-broken, because Resend rejects every send with an empty `from` and those
+  rejections would otherwise look like a completed batch.
+  **The Resend SDK does not throw on API errors** — network failures, 4xx, 422 on an unverified
+  domain, 429 rate limits and 5xx all come back as `{ data: null, error }`. `MailerService`
+  therefore inspects `error` and rejects, so the cron's per-recipient catch is real and a
+  failed batch is visible instead of reporting N/N successes.
+- **Send scheduling: one fixed UTC time for everyone (08:00 UTC), via `@nestjs/schedule`'s
+  in-process `@Cron`** — not a queue, not per-subscriber local time, not a Vercel Cron
+  hitting the web app. The API already deploys to a long-running container (Railway), so
+  an in-process cron keeps DB access (subscribers) and content access (the concept JSON)
+  in the same process. Per-subscriber local-time sending (honoring `User.reminderAnchorMinutes`
+  / `reminderTimezone`) is deferred future work, not built.
+- **Idempotency via `DailyEmailLog`**, one row per UTC calendar day, **claimed before the
+  first send** rather than written after the batch. The `date` primary key makes the day
+  single-winner, so two API replicas (or a rolling-deploy overlap at 08:00 UTC) cannot both
+  mail the list: the loser's insert hits the unique violation and that run exits without
+  sending. Writing the row afterwards instead left a read-then-write window spanning the whole
+  batch. The accepted trade is that a crash mid-batch means the remaining recipients miss that
+  day rather than receiving a duplicate — a duplicate send to the whole list is more visible to
+  subscribers and more damaging to sender reputation than one missed day, and a missed day can
+  be recovered deliberately while a duplicate cannot be un-sent. It is a global marker,
+  distinct from the per-user `Event` stream and from `QuizOutcome`.
+- **Per-recipient failures never abort the batch** — one bad address is caught and logged;
+  the cron continues to the next subscriber (mirrors the fire-and-forget discipline of the
+  behavioral-event and quiz-outcome writers).
+
 ## Data flow
 
 1. The frontend loads static concept JSON from `/content`.
