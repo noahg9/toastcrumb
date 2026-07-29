@@ -461,6 +461,26 @@ mailed once a day to anyone who subscribes with just an email — no account nee
 - **The API deploys to Railway.** Its `WEB_APP_URL` must be the same public origin
   (`https://www.toastcrumb.com`) because outbound email links are built from it.
 
+### This repo's role and sync policy (Story 1.4)
+
+- **What this repo publishes:** the open-core app code (`apps/*`, `packages/*`) plus a 5-concept
+  sample content set committed here directly. It does **not** carry the private repo's full
+  content library, BMAD planning/implementation artifacts, or the product docs that stay private
+  (`VISION.md`, `ROADMAP.md`, `PRODUCT_RULES.md`, `AI_GENERATION_PIPELINE.md`).
+- **Sync is manual, owner-performed, and one-directional** (private → public). There is no
+  automated mirror job, webhook, or CI step — the private repo is authoritative and a change is
+  ported here only when the owner makes an explicit open-core boundary call (e.g. "this feature
+  should be public too"). Nothing here ever flows back to the private repo.
+- **Trigger:** none scheduled. A port happens opportunistically, tied to a specific decision to
+  publish a feature — not on every private-repo commit, release, or epic completion. As of
+  2026-07-29 this repo's `apps/web` has 2 commits total and is known to lag the private repo
+  significantly (e.g. the superadmin console and daily-email mirror are `done` privately but not
+  ported here).
+- **`scripts/fetch-content.mjs` (`CONTENT_REPO` / `CONTENT_REPO_REF` / `CONTENT_REPO_TOKEN`)**
+  exists only so this repo can build standalone with the full content library instead of the
+  5-sample set — useful for local development or a fork. It plays no role in the production build
+  described above, which clones the private repo directly.
+
 ## Data flow
 
 1. The frontend loads static concept JSON from `/content`.
