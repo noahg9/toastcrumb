@@ -136,10 +136,32 @@ race exits without sending anything.
 
 - `date` — `YYYY-MM-DD` (UTC), the primary key
 - `sentAt`
-- `recipientCount` — count of subscribers the cron *attempted* to reach that day, not just
-  successful sends. Because the row is claimed up front this is the active-subscriber count at
-  claim time, which is the same set the send loop iterates. It cannot distinguish "delivered to
-  N" from "failed N times" — a disabled mailer writes an identical row, so do not read this as
-  proof of delivery.
+- `recipientCount` — the active-subscriber count at *claim* time, i.e. how many the run
+  **intended** to reach. Not proof of delivery on its own.
+- `completedAt` — null until the batch finishes cleanly. A null `completedAt` on an **old**
+  claim is how a crashed or killed mid-batch run is detected and safely resumed; a null one on
+  a *recent* claim means a batch is probably still running, so other runs stand off. A partial
+  batch deliberately leaves this null so the day gets finished rather than being silently
+  half-sent forever.
+- `succeededCount` — how many sends actually succeeded. Compare against `recipientCount` to
+  tell a full send from a partial one.
 - `challengeId` — the `DailyChallenge.id` (`${conceptId}:${lessonId}:${cardIndex}`) named in
   that day's email, so a future debug/admin view can confirm what a given day's email sent
+
+## DailyEmailSend
+
+Per-recipient ledger for the daily email: one row per `(date, subscriber)` that was
+**successfully** sent. This is what makes a resumed day safe — a re-run skips anyone already
+recorded here, so taking over a crashed batch retries only the recipients who genuinely missed
+out, and a transient Resend rate limit no longer drops someone permanently.
+
+- `id`
+- `date` — `YYYY-MM-DD` (UTC), matching `DailyEmailLog.date`
+- `subscriberId`
+- `sentAt`
+- Unique on `(date, subscriberId)`; indexed on `date`.
+
+> **Retention is deferred, not built.** One row per recipient per day grows without bound.
+> Pruning by `date` is cheap and the index is there for it, but no policy exists yet — the same
+> conscious gap recorded for `Event`.
+

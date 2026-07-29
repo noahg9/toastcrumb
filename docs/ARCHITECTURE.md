@@ -330,22 +330,32 @@ mailed once a day to anyone who subscribes with just an email — no account nee
   `buildDailyPool` appends in concept iteration order and `dailyChallengeIndex` indexes into
   the result, so the API must reproduce `apps/web/lib/content.ts`'s final
   `.sort((a, b) => a.difficulty - b.difficulty)` exactly — `readdir` order alone is
-  filesystem-dependent and diverged on every single pool position. Ties in `difficulty` still
-  resolve by `readdir` order in both readers; a shared deterministic ordering is open follow-up
-  work.
+  filesystem-dependent and diverged on every single pool position. The **error contract** is part of
+  the same requirement: `dailyChallengeIndex` is a modulo over pool *length*, so the two readers must
+  also agree on membership. Both are therefore all-or-nothing — one malformed concept file yields no
+  challenge rather than a silently shortened pool. Ties in `difficulty` still resolve by `readdir`
+  order in both readers (every concept currently sits in a tie group), so a shared deterministic
+  ordering is open follow-up work.
 - **Subscription is a standalone `EmailSubscriber` row, not a `User`.** Subscribing needs
   only an email; there is no account, password, or JWT tie-in. `POST /api/subscribers`,
   `GET /api/subscribers/unsubscribe?token=...` and `POST /api/subscribers/unsubscribe?token=...`
   are all unauthenticated by design — a new, narrow resource with its own minimal validation,
-  not an extension of the `/users/:id` V1 posture. `POST /api/subscribers` is rate-limited
-  (`@nestjs/throttler`, guard scoped to this controller only) because it is an unauthenticated
-  write that creates a permanent mail recipient. Addresses are normalized (`trim().toLowerCase()`)
+  not an extension of the `/users/:id` V1 posture. `POST /api/subscribers` — and **only** that
+  handler — is rate-limited (`@nestjs/throttler`, bound with `@UseGuards` at method level, not on
+  the class and not as an `APP_GUARD`) because it is an unauthenticated write that creates a
+  permanent mail recipient. The unsubscribe routes are deliberately **never** throttled:
+  rate-limiting a mandatory opt-out would turn a burst of unsubscribes, or one-click POSTs from a
+  mail provider's shared IP range, into silent failures. Note `ThrottlerModule` is itself
+  `@Global`, so where `forRoot()` is registered does not scope the config — the method-level guard
+  binding is what limits the blast radius. Addresses are normalized (`trim().toLowerCase()`)
   before storage, since Postgres unique indexes are case-sensitive and two casings of one
   address would otherwise be two subscriptions with two unsubscribe tokens.
 - **Unsubscribe: the `GET` is non-mutating; the `POST` performs the opt-out.** Mail clients
   and security gateways routinely prefetch links found in delivered mail, so a mutating GET
   would silently unsubscribe people who never clicked. `GET` redirects to the web app's
-  `/unsubscribe?token=…` confirmation page, whose button issues the `POST`. The daily email
+  `/unsubscribe?token=…` confirmation page, whose button issues the `POST`. A missing, array-valued
+  or over-long token lands on that page's "link isn't valid" branch — **not** on `/unsubscribed`,
+  which asserts the opt-out succeeded and must only be reachable after the `POST`. The daily email
   also carries RFC 8058 `List-Unsubscribe` + `List-Unsubscribe-Post: List-Unsubscribe=One-Click`
   headers so a mail client's own native unsubscribe control works in one click — it POSTs,
   which is why the header pair and the non-mutating GET must stay together. Unknown, stale,
@@ -381,9 +391,21 @@ mailed once a day to anyone who subscribes with just an email — no account nee
   sending. Writing the row afterwards instead left a read-then-write window spanning the whole
   batch. The accepted trade is that a crash mid-batch means the remaining recipients miss that
   day rather than receiving a duplicate — a duplicate send to the whole list is more visible to
-  subscribers and more damaging to sender reputation than one missed day, and a missed day can
-  be recovered deliberately while a duplicate cannot be un-sent. It is a global marker,
-  distinct from the per-user `Event` stream and from `QuizOutcome`.
+  subscribers and more damaging to sender reputation than one missed day. **Known limitation:**
+  that missed day is currently silent and permanent. The surviving claim row looks identical to a
+  full success. That is now solved: `completedAt` stays null until the batch finishes cleanly, and a
+  **`DailyEmailSend` per-recipient ledger** records each success as it happens. A run that finds an
+  incomplete claim younger than 30 minutes assumes another process is still sending and stands off;
+  older than that it resumes, and the ledger means only the recipients who actually missed out are
+  retried — zero double-sends. A partial batch deliberately leaves `completedAt` null so the day
+  gets finished rather than staying half-sent. The same ledger is why a transient Resend rate limit
+  no longer drops a recipient for good; sends are additionally paced at ~1.6/sec, under Resend's
+  ~2/sec default. Opt-out state is re-read immediately before each send, so someone unsubscribing
+  mid-batch is not mailed minutes later from a stale snapshot. An instance that cannot actually
+  deliver mail (no
+  `RESEND_API_KEY`/`MAIL_FROM_ADDRESS`) refuses to claim at all, so a staging deploy or a developer
+  machine sharing the database cannot suppress the real send. It is a global marker, distinct from
+  the per-user `Event` stream and from `QuizOutcome`.
 - **Per-recipient failures never abort the batch** — one bad address is caught and logged;
   the cron continues to the next subscriber (mirrors the fire-and-forget discipline of the
   behavioral-event and quiz-outcome writers).
