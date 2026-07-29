@@ -437,6 +437,30 @@ mailed once a day to anyone who subscribes with just an email — no account nee
   the cron continues to the next subscriber (mirrors the fire-and-forget discipline of the
   behavioral-event and quiz-outcome writers).
 
+## Deployment
+
+- **Production is `https://www.toastcrumb.com`.** The apex `toastcrumb.com` issues a 308 to
+  `www`, so `www` is the canonical host and every canonical/`og:url` must use it.
+- **The Vercel project builds the private repo (`toastcrumb-internal`), not this one.** This
+  public repo is a **curated open-core export and is deployed nowhere.** Pushing here does not
+  ship anything.
+- Historically the Vercel project was git-linked to *this* repo, which meant no application code
+  written in the private repo ever reached production — several epics were marked complete while
+  unreleased. Story 1.4 corrected the topology; treat "the repo that is developed is the repo
+  that is deployed" as an invariant.
+- **`scripts/fetch-content.mjs` and `CONTENT_REPO_TOKEN` are for this repo's standalone build
+  only.** They clone the private content library over the 5 sample concepts committed here. They
+  are not part of the production build, which already has the full library in-tree.
+- **`NEXT_PUBLIC_BASE_URL` is required at build time.** Every canonical, `og:url`, OG image URL,
+  sitemap entry and the `Sitemap:` line in `robots.txt` derives from it via `getBaseUrl()`.
+  Because it is `NEXT_PUBLIC_`-prefixed the value is **inlined at build**, so changing it in the
+  Vercel dashboard has no effect until a redeploy. `getBaseUrl()` throws on a Vercel build when
+  it is missing (guarded on `VERCEL_ENV`, so local builds keep the `http://localhost:3000`
+  fallback) — a missing value would otherwise bake `localhost` into every canonical and silently
+  de-index the site, which is exactly what happened before the guard existed.
+- **The API deploys to Railway.** Its `WEB_APP_URL` must be the same public origin
+  (`https://www.toastcrumb.com`) because outbound email links are built from it.
+
 ## Data flow
 
 1. The frontend loads static concept JSON from `/content`.
