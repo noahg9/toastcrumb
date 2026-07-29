@@ -104,14 +104,24 @@ token it is a no-op and the committed sample is used.
 
 ### SEO & social previews
 
-Every public, indexable page carries full canonical/Open Graph/Twitter metadata, following
-one shared pattern: `title`, `description`, `openGraph.{title,description,url,type:"website"}`,
+Content pages carry full canonical/Open Graph/Twitter metadata, following one shared
+pattern: `title`, `description`, `openGraph.{title,description,url,type:"website"}`,
 `twitter.{card:"summary_large_image",title,description}`, and `alternates.canonical` (via
-`getBaseUrl()`). This covers `/`, `/daily` (+ dated/archive variants), `/how-its-made`,
+`getBaseUrl()`). This covers `/daily` (+ dated/archive variants), `/how-its-made`,
 `/lesson/[conceptId]` (every concept's lesson page), and `/learn` (the concept-graph skill
-tree). Each of these also has a dedicated `opengraph-image.tsx` route rendering a branded
-1200×630 PNG via the shared `renderDailyOg` builder — per-concept for lesson pages, static
-for `/how-its-made` and `/learn`.
+tree). Each of those five surfaces has a dedicated `opengraph-image.tsx` route rendering a
+branded 1200×630 PNG via the shared `renderDailyOg` builder — per-concept for lesson pages,
+static for `/how-its-made` and `/learn`.
+
+`/` is the exception: it exports no page-level `metadata` of its own and has no OG image
+route, so it inherits only the site-level defaults from `app/layout.tsx` (`metadataBase`,
+`title`, `description`, `keywords`, `openGraph.{title,type,siteName}`, `twitter.card:
+"summary"`) — no page `openGraph.url` and no `alternates.canonical`.
+
+`getBaseUrl()` reads `NEXT_PUBLIC_BASE_URL`, which is inlined at **build** time. It is
+required on Vercel builds (the helper throws without it) because a missing value would
+otherwise bake `localhost` into every canonical, `og:url` and OG image URL and silently
+de-index the site; changing it in the dashboard has no effect until a redeploy.
 
 `sitemap.ts` lists every concept's `/lesson/[conceptId]` URL, but only those with at least
 one lesson (`lesson/page.tsx` 404s on a concept with zero lessons, so the sitemap filters
