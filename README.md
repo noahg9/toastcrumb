@@ -19,6 +19,7 @@ hosted product and are not part of this repo.
 | `apps/api` | User state, XP, streaks, progress, events | NestJS 11 · Prisma 6 · PostgreSQL |
 | `packages/types` | Shared domain types + content rules | TypeScript |
 | `content/` | Static concept/lesson JSON (**sample set** — see note below) | JSON |
+| `graph/` | The full concept graph, exported (`graph.json` + `GRAPH.md`) | JSON · Markdown/Mermaid |
 
 ## Open-core: how content works
 
@@ -34,6 +35,26 @@ are proprietary** and live in a private repository — they're the product, not 
   set, pulls `content/` from the private repo. Without the token it's a no-op and the sample
   is used. See that file's header for the env vars (`CONTENT_REPO_TOKEN`, `CONTENT_REPO`,
   `CONTENT_REPO_REF`).
+
+## Concept graph
+
+**The whole map is here, for every concept** — not just the sample: **[`graph/GRAPH.md`](graph/GRAPH.md)**
+(rendered Mermaid diagrams per domain, plus a table of every concept) and
+**[`graph/graph.json`](graph/graph.json)** (the same data, machine-readable).
+
+- **What it contains:** each concept's `id`, `title`, `description`, `difficulty`, `domain`,
+  `prerequisites` and `next` — that is, the graph structure and the metadata needed to read it.
+- **What it does not contain:** the lessons. Cards, quizzes, answer options and explanations are
+  the product and are not exported. The per-concept `contexts` are excluded too.
+- **Yes, `graph/` and `content/concepts/` disagree in size — deliberately.** The graph covers
+  every concept; `content/concepts/` here holds only the sample set described above. Full map,
+  sample lessons.
+- **How it gets here:** generated from the private content library by `content:export-graph` and
+  copied here **by hand**, under the same manual, one-directional sync policy as the rest of this
+  repo ([`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#deployment)). Both files are generated
+  artifacts — don't hand-edit them; a PR that does will be regenerated away.
+- **Licence:** the export is content, so it is CC BY-NC 4.0 like the rest of `content/` — see
+  [`content/LICENSE`](content/LICENSE).
 
 ## Prerequisites
 

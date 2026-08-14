@@ -28,6 +28,25 @@ is never persisted.
 - Nodes unlock progressively as their prerequisites are completed.
 - Completed, available, and locked nodes are visually distinct.
 
+## Published export
+
+The graph is also published as a standalone artifact in this repo:
+
+- `graph/graph.json` — machine-readable: `id`, `title`, `description`, `difficulty`, `domain`,
+  `prerequisites`, `next` per concept, plus a `version` and a `$schema` marker.
+- `graph/GRAPH.md` — human-readable: one Mermaid `flowchart LR` per domain and a table of every
+  concept.
+
+Both are **generated, never hand-edited** — produced by `content:export-graph` in the private
+content repo (which owns the full library) and copied here verbatim under this repo's manual
+sync policy (`ARCHITECTURE.md` → "This repo's role and sync policy"). The generator builds the
+graph with the same `buildGraph` the app uses, so the published map and the in-app map cannot
+drift. Output is deterministic — identical content in, byte-identical files out — and a
+staleness check in the private repo's CI fails if a concept changes without a re-export.
+
+The export covers **all** concepts even though `content/concepts/` here is a sample set; lesson
+content is deliberately excluded.
+
 ## The feeling to preserve
 
 > "Everything is connected, and I can see where I'm going."

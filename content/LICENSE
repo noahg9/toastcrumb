@@ -15,7 +15,16 @@ application code in this repository is licensed separately under Apache-2.0 (see
 the LICENSE file at the repository root).
 
 -------------------------------------------------------------------------------
-NOTE (remove this block before publishing): paste the full canonical CC BY-NC 4.0
-legal text from the URL above, or link to it. GitHub's license picker does not
-offer CC content licenses, so add the full text manually.
+This file is a notice, not a substitute for the licence. The complete, binding
+legal text of the Creative Commons Attribution-NonCommercial 4.0 International
+Public License is published by Creative Commons at:
+
+  https://creativecommons.org/licenses/by-nc/4.0/legalcode
+
+and is incorporated here by reference in full. A plain-language summary (not a
+licence) is at https://creativecommons.org/licenses/by-nc/4.0/.
+
+GitHub's licence picker does not offer Creative Commons content licences, so this
+directory may show as "unlicensed" in the repository sidebar. The licence above
+applies regardless.
 -------------------------------------------------------------------------------

@@ -1,0 +1,276 @@
+{
+  "$schema": "https://www.toastcrumb.com/schema/concept-graph-v1.json",
+  "version": 1,
+  "generatedFrom": "content/concepts",
+  "license": "CC-BY-NC-4.0",
+  "conceptCount": 20,
+  "domains": [
+    "caching",
+    "networking"
+  ],
+  "nodes": [
+    {
+      "id": "cache",
+      "title": "Cache",
+      "description": "Keep a copy of frequently accessed data somewhere fast so you avoid repeating expensive fetches or computations.",
+      "difficulty": 1,
+      "domain": "caching",
+      "prerequisites": [],
+      "next": [
+        "cache-hit-miss",
+        "cache-invalidation",
+        "cdn"
+      ]
+    },
+    {
+      "id": "cache-hit-miss",
+      "title": "Cache Hit and Miss",
+      "description": "A cache hit means the data you need is already stored nearby; a cache miss means it is not, so the system must fetch it from the slower original source.",
+      "difficulty": 1,
+      "domain": "caching",
+      "prerequisites": [
+        "cache"
+      ],
+      "next": [
+        "cache-eviction",
+        "cache-aside"
+      ]
+    },
+    {
+      "id": "ip-addressing",
+      "title": "IP Addressing",
+      "description": "Every device on a network gets a unique numerical address so that data knows where to be sent and received.",
+      "difficulty": 1,
+      "domain": "networking",
+      "prerequisites": [],
+      "next": [
+        "dns",
+        "subnetting",
+        "tcp-udp"
+      ]
+    },
+    {
+      "id": "tcp-udp",
+      "title": "TCP vs UDP",
+      "description": "TCP and UDP are the two main protocols that control how data is broken into packets and delivered, with TCP guaranteeing delivery and UDP prioritizing speed.",
+      "difficulty": 1,
+      "domain": "networking",
+      "prerequisites": [
+        "ip-addressing"
+      ],
+      "next": [
+        "http",
+        "websockets"
+      ]
+    },
+    {
+      "id": "cache-aside",
+      "title": "Cache-Aside Pattern",
+      "description": "The application checks the cache first, and on a miss it fetches from the database and writes the result back into the cache itself before returning it.",
+      "difficulty": 2,
+      "domain": "caching",
+      "prerequisites": [
+        "cache-hit-miss"
+      ],
+      "next": [
+        "write-through-cache"
+      ]
+    },
+    {
+      "id": "cache-eviction",
+      "title": "Cache Eviction Policies",
+      "description": "When a cache is full, a policy such as Least Recently Used or Least Frequently Used decides which existing entries to drop to make room for new ones.",
+      "difficulty": 2,
+      "domain": "caching",
+      "prerequisites": [
+        "cache-hit-miss"
+      ],
+      "next": [
+        "cache-stampede"
+      ]
+    },
+    {
+      "id": "cache-invalidation",
+      "title": "Cache Invalidation",
+      "description": "Removing or updating stale entries in a cache so callers never read outdated data after the underlying source changes.",
+      "difficulty": 2,
+      "domain": "caching",
+      "prerequisites": [
+        "cache"
+      ],
+      "next": [
+        "ttl",
+        "write-through-cache"
+      ]
+    },
+    {
+      "id": "dns",
+      "title": "DNS",
+      "description": "DNS is a global directory that translates human-readable domain names like google.com into the numerical IP addresses computers use to connect.",
+      "difficulty": 2,
+      "domain": "networking",
+      "prerequisites": [
+        "ip-addressing"
+      ],
+      "next": [
+        "http",
+        "load-balancing"
+      ]
+    },
+    {
+      "id": "http",
+      "title": "HTTP",
+      "description": "HTTP is the request-and-response protocol that browsers and servers use to exchange web pages and data over the internet.",
+      "difficulty": 2,
+      "domain": "networking",
+      "prerequisites": [
+        "tcp-udp",
+        "dns"
+      ],
+      "next": [
+        "tls",
+        "rest-apis",
+        "websockets"
+      ]
+    },
+    {
+      "id": "rest-apis",
+      "title": "REST APIs",
+      "description": "A REST API is a standardized way for programs to communicate over HTTP using plain URLs and verbs like GET, POST, and DELETE.",
+      "difficulty": 2,
+      "domain": "networking",
+      "prerequisites": [
+        "http"
+      ],
+      "next": []
+    },
+    {
+      "id": "subnetting",
+      "title": "Subnetting",
+      "description": "Subnetting divides a large network into smaller logical groups so that traffic stays organized and security boundaries are easier to enforce.",
+      "difficulty": 2,
+      "domain": "networking",
+      "prerequisites": [
+        "ip-addressing"
+      ],
+      "next": [
+        "load-balancing"
+      ]
+    },
+    {
+      "id": "ttl",
+      "title": "Time-to-Live (TTL)",
+      "description": "Attach an expiry duration to each cached entry so it is automatically discarded after a set number of seconds, preventing data from going stale indefinitely.",
+      "difficulty": 2,
+      "domain": "caching",
+      "prerequisites": [
+        "cache-invalidation"
+      ],
+      "next": [
+        "cache-stampede"
+      ]
+    },
+    {
+      "id": "cache-stampede",
+      "title": "Cache Stampede",
+      "description": "When a popular cached entry expires, many concurrent requests all miss at once and simultaneously hit the database before the cache is repopulated, briefly overwhelming the system.",
+      "difficulty": 3,
+      "domain": "caching",
+      "prerequisites": [
+        "ttl",
+        "cache-eviction"
+      ],
+      "next": [
+        "distributed-cache"
+      ]
+    },
+    {
+      "id": "cdn",
+      "title": "CDN",
+      "description": "A CDN caches copies of your static files on servers around the world so users fetch content from a nearby node rather than a single distant origin server.",
+      "difficulty": 3,
+      "domain": "caching",
+      "prerequisites": [
+        "load-balancing"
+      ],
+      "next": []
+    },
+    {
+      "id": "load-balancing",
+      "title": "Load Balancing",
+      "description": "A load balancer spreads incoming requests across multiple servers so no single machine is overwhelmed and the service stays fast and available.",
+      "difficulty": 3,
+      "domain": "networking",
+      "prerequisites": [
+        "dns",
+        "subnetting"
+      ],
+      "next": [
+        "cdn"
+      ]
+    },
+    {
+      "id": "tls",
+      "title": "TLS and HTTPS",
+      "description": "TLS encrypts data in transit between a client and server so that anyone eavesdropping on the network cannot read or alter it.",
+      "difficulty": 3,
+      "domain": "networking",
+      "prerequisites": [
+        "http"
+      ],
+      "next": [
+        "http2"
+      ]
+    },
+    {
+      "id": "websockets",
+      "title": "WebSockets",
+      "description": "WebSockets keep a persistent, two-way connection open between a client and server so data can stream in both directions without re-connecting for each message.",
+      "difficulty": 3,
+      "domain": "networking",
+      "prerequisites": [
+        "tcp-udp",
+        "http"
+      ],
+      "next": []
+    },
+    {
+      "id": "write-through-cache",
+      "title": "Write-Through Cache",
+      "description": "Every write goes to the cache and the underlying data store at the same time, keeping them always in sync at the cost of slightly slower individual writes.",
+      "difficulty": 3,
+      "domain": "caching",
+      "prerequisites": [
+        "cache-aside",
+        "cache-invalidation"
+      ],
+      "next": [
+        "distributed-cache"
+      ]
+    },
+    {
+      "id": "distributed-cache",
+      "title": "Distributed Cache",
+      "description": "A cache layer spread across multiple machines (such as Redis Cluster) so no single node's memory limit or failure can take down the entire caching tier.",
+      "difficulty": 4,
+      "domain": "caching",
+      "prerequisites": [
+        "write-through-cache",
+        "cache-stampede",
+        "cdn"
+      ],
+      "next": []
+    },
+    {
+      "id": "http2",
+      "title": "HTTP/2",
+      "description": "HTTP/2 is an upgrade to HTTP that multiplexes multiple requests over one connection simultaneously, cutting the overhead that slows down modern web pages.",
+      "difficulty": 4,
+      "domain": "networking",
+      "prerequisites": [
+        "tls"
+      ],
+      "next": []
+    }
+  ]
+}

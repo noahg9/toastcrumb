@@ -463,10 +463,14 @@ mailed once a day to anyone who subscribes with just an email — no account nee
 
 ### This repo's role and sync policy (Story 1.4)
 
-- **What this repo publishes:** the open-core app code (`apps/*`, `packages/*`) plus a 5-concept
-  sample content set committed here directly. It does **not** carry the private repo's full
-  content library, BMAD planning/implementation artifacts, or the product docs that stay private
-  (`VISION.md`, `ROADMAP.md`, `PRODUCT_RULES.md`, `AI_GENERATION_PIPELINE.md`).
+- **What this repo publishes:** the open-core app code (`apps/*`, `packages/*`), a 5-concept
+  sample content set committed here directly, and the **concept-graph export** in `graph/`
+  (`graph.json` + `GRAPH.md`) — the full graph for *every* concept, structure and concept
+  metadata only, generated in the private repo and copied here verbatim (see
+  `CONCEPT_GRAPH.md` → "Published export"). It does **not** carry the private repo's full
+  content library, its lesson content in any form, BMAD planning/implementation artifacts, or
+  the product docs that stay private (`VISION.md`, `ROADMAP.md`, `PRODUCT_RULES.md`,
+  `AI_GENERATION_PIPELINE.md`).
 - **Sync is manual, owner-performed, and one-directional** (private → public). There is no
   automated mirror job, webhook, or CI step — the private repo is authoritative and a change is
   ported here only when the owner makes an explicit open-core boundary call (e.g. "this feature
